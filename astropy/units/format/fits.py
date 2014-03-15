@@ -15,7 +15,13 @@ from ...utils.exceptions import AstropyDeprecationWarning
 
 from . import generic
 from . import utils
+from ...utils.misc import did_you_mean
 
+class UnitScaleError(ValueError):
+    """
+    Used to catch the errors involving scaled units, 
+    which are not recognized by FITS format.
+    """
 
 class Fits(generic.Generic):
     """
@@ -67,7 +73,7 @@ class Fits(generic.Generic):
             'photon', 'ph', 'pixel', 'pix', 'D', 'Sun', 'chan', 'bin',
             'voxel', 'adu', 'beam'
         ]
-        deprecated_units = ['erg', 'Angstrom']
+        deprecated_units = ['erg', 'Angstrom', 'angstrom']
 
         for unit in simple_units + deprecated_units:
             names[unit] = getattr(u, unit)
@@ -77,10 +83,15 @@ class Fits(generic.Generic):
         return names, deprecated_names
 
     @classmethod
-    def _parse_unit(cls, unit):
+    def _parse_unit(cls, unit, detailed_exception=True):
         if unit not in cls._units:
-            raise ValueError(
-                "Unit {0!r} not supported by the FITS standard.".format(unit))
+            if detailed_exception:
+                raise ValueError(
+                    "Unit {0!r} not supported by the FITS standard. {1}".format(
+                        unit, did_you_mean(
+                            unit, cls._units)))
+            else:
+                raise ValueError()
 
         if unit in cls._deprecated_units:
             warnings.warn(
@@ -113,7 +124,7 @@ class Fits(generic.Generic):
 
         if isinstance(unit, core.CompositeUnit):
             if unit.scale != 1:
-                raise ValueError(
+                raise UnitScaleError(
                     "The FITS unit format is not able to represent scale. "
                     "Multiply your data by {0:e}.".format(unit.scale))
 

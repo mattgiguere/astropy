@@ -1,7 +1,8 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 """Support VO Simple Cone Search capabilities."""
-from __future__ import print_function, division
+from __future__ import absolute_import, division, print_function, unicode_literals
 
+# STDLIB
 import warnings
 
 # THIRD-PARTY
@@ -96,9 +97,9 @@ def conesearch(center, radius, verb=1, **kwargs):
               given in decimal degrees.
             - If astropy coordinates object is given, it will
               be converted internally to
-              `~astropy.coordinates.builtin_systems.ICRS`.
+              `~astropy.coordinates.ICRS`.
 
-    radius : float or `~astropy.coordinates.angles.Angle` object
+    radius : float or `~astropy.coordinates.Angle` object
         Radius of the cone to search:
 
             - If float is given, it is assumed to be in decimal degrees.
@@ -230,7 +231,7 @@ class AsyncSearchAll(AsyncBase):
     If no ``timeout`` keyword given, it waits until completion:
 
     >>> async_allresults = async_search.get(timeout=30)
-    >>> all_catalogs = async_allresults.keys()
+    >>> all_catalogs = list(async_allresults)
     >>> first_cone_arr = async_allresults[all_catalogs[0]].array.data
     >>> first_cone_arr.size
     36184
@@ -486,17 +487,28 @@ def _local_conversion(func, x):
 
 
 def _validate_coord(center):
+    """Validate coordinates."""
     if isinstance(center, SphericalCoordinatesBase):
         icrscoord = center.transform_to(ICRS)
     else:
         icrscoord = ICRS(*center, unit=(u.degree, u.degree))
 
-    return icrscoord.ra.degree, icrscoord.dec.degree
+    ra = icrscoord.ra.degree
+    dec = icrscoord.dec.degree
+
+    # RA has tendency to go negative in Longitude class.
+    ra_sign = '{0:+}'.format(ra)[0]
+    if ra_sign == '-' and ra == 0:  # -0 is okay
+        ra = 0
+    else:  # pragma: no cover
+        raise ConeSearchError('Cone Search cannot accept negative RA value '
+                              '({0} deg)'.format(ra))
+
+    return ra, dec
 
 
 def _validate_sr(radius):
     """Validate search radius."""
-        # Validate search radius
     if isinstance(radius, Angle):
         sr_angle = radius
     else:

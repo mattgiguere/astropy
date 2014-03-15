@@ -135,7 +135,7 @@ def test_creating_cartesian_single():
 
 def test_creating_cartesian_triple():
     """
-    test building cartesian points with the `x`,`y`,`z` constructor
+    test building cartesian points with the ``x``,``y``,``z`` constructor
     """
 
     from .. import CartesianPoints
@@ -210,3 +210,20 @@ def test_cartesian_view():
     asarr.ravel()[0] = 2
     assert not np.all(asarr == 1)
     assert not c.x[0] == 2
+
+def test_negative_distance():
+    """ Test optional kwarg allow_negative """
+
+    from .. import Distance
+
+    with pytest.raises(ValueError):
+        d = Distance([-2, 3.1], u.kpc)
+
+    with pytest.raises(ValueError):
+        d = Distance([-2, -3.1], u.kpc)
+
+    with pytest.raises(ValueError):
+        d = Distance(-2, u.kpc)
+
+
+    d = Distance(-2, u.kpc, allow_negative=True)

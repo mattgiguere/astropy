@@ -3,6 +3,9 @@
 Tests models.parameters
 """
 
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import numpy as np
 from numpy.testing import utils
 
@@ -29,6 +32,68 @@ class TestParModel(ParametricModel):
     def __call__(self):
         pass
 
+
+class MockModel(ParametricModel):
+    def __call__(self):
+        pass
+
+
+def test_parameter_properties():
+    """Test if getting / setting of Parameter properties works."""
+
+    # It is possible to test some Parameter functionality by binding it to a
+    # dummy model and giving it a default value
+    p = Parameter(name='alpha', default=42, model=MockModel())
+
+    assert p.name == 'alpha'
+
+    # Parameter names are immutable
+    with pytest.raises(AttributeError):
+        p.name = 'beta'
+
+    assert p.fixed == False
+    p.fixed = True
+    assert p.fixed == True
+
+    assert p.tied == False
+    p.tied = lambda _: 0
+
+    p.tied = False
+    assert p.tied == False
+
+    assert p.min == None
+    p.min = 42
+    assert p.min == 42
+    p.min = None
+    assert p.min == None
+
+    assert p.max == None
+    # TODO: shouldn't setting a max < min give an error?
+    p.max = 41
+    assert p.max == 41
+
+
+def test_parameter_operators():
+    """Test if the parameter arithmetic operators works,
+    i.e. whether parameters behave like numbers."""
+
+    par = Parameter(name='alpha', default=5., model=MockModel())
+    num = 5.
+    val = 3
+
+    assert par - val == num - val
+    assert val - par == val - num
+    assert par / val == num / val
+    assert val / par == val / num
+    assert par ** val == num ** val
+    assert val ** par == val ** num
+    assert par < 6
+    assert par > 3
+    assert par <= par
+    assert par >= par
+    assert par == par
+    assert -par == -num
+    assert abs(par) == abs(num)
 
 class TestParameters(object):
 
@@ -142,7 +207,7 @@ class TestParameters(object):
         Uses an iraf example.
         """
         new_model = self.linear_fitter(self.model, self.x, self.y)
-        print self.y, self.x
+        print(self.y, self.x)
         utils.assert_allclose(new_model.parameters,
                               np.array(
                                   [4826.1066602783685, 952.8943813407858,
@@ -206,7 +271,7 @@ class TestMultipleParameterSets(object):
 
     def setup_class(self):
         self.x1 = np.arange(1, 10, .1)
-        self.x, self.y = np.mgrid[:10, :7]
+        self.y, self.x = np.mgrid[:10, :7]
         self.x11 = np.array([self.x1, self.x1]).T
         self.gmodel = models.Gaussian1D([12, 10], [3.5, 5.2], stddev=[.4, .7])
 

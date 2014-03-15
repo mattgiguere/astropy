@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import division
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
 import numpy as np
 
@@ -77,8 +78,8 @@ def discretize_model(model, x_range, y_range=None, mode='center', factor=10):
 
     Parameters
     ----------
-    model : :class:`~astropy.modeling.core.ParametricModel` instance
-        Instance of a :class:`~astropy.modeling.core.ParametricModel` to be evaluated.
+    model : :class:`~astropy.modeling.ParametricModel` instance
+        Instance of a :class:`~astropy.modeling.ParametricModel` to be evaluated.
     x_range : tuple
         x range in which the model is evaluated.
     y_range : tuple, optional
@@ -97,7 +98,7 @@ def discretize_model(model, x_range, y_range=None, mode='center', factor=10):
                 Discretize model by taking the average
                 on an oversampled grid.
             * ``'integrate'``
-                Discretize model by integrating the model 
+                Discretize model by integrating the model
                 over the bin using `scipy.integrate.quad`.
                 Very slow.
     factor : float or int
@@ -214,7 +215,7 @@ def discretize_oversample_1D(model, x_range, factor=10):
     values = model(x)
 
     # Reshape and compute mean
-    values = np.reshape(values, (x.size / factor, factor))
+    values = np.reshape(values, (x.size // factor, factor))
     return values.mean(axis=1)[:-1]
 
 
@@ -232,7 +233,7 @@ def discretize_oversample_2D(model, x_range, y_range, factor=10):
     values = model(x_grid, y_grid)
 
     # Reshape and compute mean
-    shape = (y.size / factor, factor, x.size / factor, factor)
+    shape = (y.size // factor, factor, x.size // factor, factor)
     values = np.reshape(values, shape)
     return values.mean(axis=3).mean(axis=1)[:-1, :-1]
 

@@ -1,5 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+# TEST_UNICODE_LITERALS
+
 import copy
 import functools
 import sys
@@ -9,7 +11,7 @@ from datetime import datetime
 import numpy as np
 
 from ...tests.helper import pytest
-from .. import Time, ScaleValueError, erfa_time
+from .. import Time, ScaleValueError, erfa_time, TIME_SCALES
 
 
 allclose_jd = functools.partial(np.allclose, rtol=2. ** -52, atol=0)
@@ -168,8 +170,21 @@ class TestBasic():
         assert t.tai.iso == '2006-01-15 21:25:10.500000'
         assert t.tt.iso == '2006-01-15 21:25:42.684000'
         assert t.tcg.iso == '2006-01-15 21:25:43.322690'
-        assert t.tdb.iso == '2006-01-15 21:25:42.683799'
-        assert t.tcb.iso == '2006-01-15 21:25:56.893378'
+        assert t.tdb.iso == '2006-01-15 21:25:42.684373'
+        assert t.tcb.iso == '2006-01-15 21:25:56.893952'
+
+    def test_all_transforms(self):
+        """Test that all transforms work.  Does not test correctness,
+        except reversibility [#2074]"""
+        lat = 19.48125
+        lon = -155.933222
+        for scale1 in TIME_SCALES:
+            t1 = Time('2006-01-15 21:24:37.5', format='iso', scale=scale1,
+                      lat=lat, lon=lon)
+            for scale2 in TIME_SCALES:
+                t2 = getattr(t1, scale2)
+                t21 = getattr(t2, scale1)
+                assert allclose_jd(t21.jd, t1.jd)
 
     def test_creating_all_formats(self):
         """Create a time object using each defined format"""
@@ -389,15 +404,28 @@ class TestSubFormat():
 
         # Check that bad scale is caught when format is specified
         with pytest.raises(ScaleValueError):
-            Time(1950.0, format='byear')
-        with pytest.raises(ScaleValueError):
             Time(1950.0, format='byear', scale='bad scale')
 
         # Check that bad scale is caught when format is auto-determined
         with pytest.raises(ScaleValueError):
-            Time('2000:001:00:00:00')
-        with pytest.raises(ScaleValueError):
             Time('2000:001:00:00:00', scale='bad scale')
+
+    def test_scale_default(self):
+        """Test behavior when no scale is provided"""
+        # These first three are TimeFromEpoch and have an intrinsic time scale
+        t = Time(100.0, format='cxcsec')
+        assert t.scale == 'tt'
+        t = Time(100.0, format='unix')
+        assert t.scale == 'utc'
+        t = Time(100.0, format='gps')
+        assert t.scale == 'tai'
+
+        for date in ('J2000', '2000:001', '2000-01-01T00:00:00'):
+            t = Time(date)
+            assert t.scale == 'utc'
+
+        t = Time(2000.1, format='byear')
+        assert t.scale == 'utc'
 
     def test_epoch_times(self):
         """Test time formats derived from EpochFromTime"""
@@ -554,3 +582,7 @@ def test_TimeFormat_scale():
     t.delta_ut1_utc = 0.0
     t.unix
     assert t.unix == t.utc.unix
+
+def test_scale_conversion():
+    with pytest.raises(ScaleValueError):
+        t = Time(Time.now().cxcsec, format='cxcsec', scale='ut1')

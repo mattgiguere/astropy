@@ -69,9 +69,6 @@ USE_COLOR = ConfigurationItem(
 from ..import UNICODE_OUTPUT
 
 
-IS_PY3 = sys.version_info[0] == 3
-
-
 _DEFAULT_ENCODING = 'utf-8'
 
 
@@ -255,7 +252,7 @@ def color_print(*args, **kwargs):
             # Some file objects support writing unicode sensibly on some Python
             # versions; if this fails try creating a writer using the locale's
             # preferred encoding. If that fails too give up.
-            if not IS_PY3 and isinstance(msg, bytes):
+            if not six.PY3 and isinstance(msg, bytes):
                 msg = _decode_preferred_encoding(msg)
 
             write = _write_with_fallback(msg, write, file)
@@ -264,7 +261,7 @@ def color_print(*args, **kwargs):
     else:
         for i in range(0, len(args), 2):
             msg = args[i]
-            if not IS_PY3 and isinstance(msg, bytes):
+            if not six.PY3 and isinstance(msg, bytes):
                 # Support decoding bytes to unicode on Python 2; use the
                 # preferred encoding for the locale (which is *sometimes*
                 # sensible)
@@ -840,6 +837,11 @@ def print_code_line(line, col=None, file=None, tabwidth=8, width=70):
     if file is None:
         file = stdio.stdout
 
+    if UNICODE_OUTPUT():
+        ellipsis = '…'
+    else:
+        ellipsis = '...'
+
     write = file.write
 
     if col is not None:
@@ -853,15 +855,15 @@ def print_code_line(line, col=None, file=None, tabwidth=8, width=70):
     if col is not None and col > width:
         new_col = min(width // 2, len(line) - col)
         offset = col - new_col
-        line = line[offset + 1:]
+        line = line[offset + len(ellipsis):]
+        width -= len(ellipsis)
         new_col = col
         col -= offset
-        width = width - 3
-        color_print('…', 'darkgrey', file=file, end='')
+        color_print(ellipsis, 'darkgrey', file=file, end='')
 
     if len(line) > width:
-        write(line[:width - 1])
-        color_print('…', 'darkgrey', file=file)
+        write(line[:width - len(ellipsis)])
+        color_print(ellipsis, 'darkgrey', file=file)
     else:
         write(line)
         write('\n')

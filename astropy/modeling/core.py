@@ -12,7 +12,7 @@ possible the transformation is done using multiple parameter sets, `param_sets`.
 The number of parameter sets is stored in an attribute `param_dim`.
 
 Parametric models also store a flat list of all parameters as an instance of
-`~astropy.modeling.parameters.Parameters`. When fitting, this list-like object is modified by a
+`~astropy.modeling.Parameter`. When fitting, this list-like object is modified by a
 subclass of `~astropy.modeling.fitting.Fitter`. When fitting nonlinear models, the values of the
 parameters are used as initial guesses by the fitting class. Normally users
 will not have to use the `~astropy.modeling.parameters` module directly.
@@ -20,7 +20,7 @@ will not have to use the `~astropy.modeling.parameters` module directly.
 Input Format For Model Evaluation and Fitting
 
 Input coordinates are passed in separate arguments, for example 2D models
-expect x and y coordinates to be passed separately as two scalars or aray-like
+expect x and y coordinates to be passed separately as two scalars or array-like
 objects.
 The evaluation depends on the input dimensions and the number of parameter
 sets but in general normal broadcasting rules apply.
@@ -40,19 +40,22 @@ In all these cases the output has the same shape as the input.
   of the output is (M, N)
 """
 
-from __future__ import division
+from __future__ import (absolute_import, unicode_literals, division,
+                        print_function)
 
 import abc
 import functools
 import copy
-from itertools import izip
 from textwrap import dedent
 
 import numpy as np
 
-from .parameters import Parameter, InputParameterError
 from ..utils import indent, isiterable
+from ..extern import six
+from ..extern.six.moves import zip as izip
+from ..extern.six.moves import range
 
+from .parameters import Parameter, InputParameterError
 
 __all__ = ['Model', 'ParametricModel', 'SummedCompositeModel',
            'SerialCompositeModel', 'LabeledInput', 'Parametric1DModel',
@@ -155,6 +158,7 @@ class _ModelMeta(abc.ABCMeta):
         return super(_ModelMeta, mcls).__new__(mcls, name, bases, members)
 
 
+@six.add_metaclass(_ModelMeta)
 class Model(object):
     """
     Base class for all models.
@@ -168,8 +172,6 @@ class Model(object):
     This class sets the properties for all individual parameters and performs
     parameter validation.
     """
-
-    __metaclass__ = _ModelMeta
 
     param_names = []
     n_inputs = 1
@@ -245,14 +247,14 @@ class Model(object):
 
         raise NotImplementedError("Subclasses should implement this")
 
-    def add_model(self, newtr, mode):
+    def add_model(self, model, mode):
         """
         Create a CompositeModel by chaining the current model with the new one
         using the specified mode.
 
         Parameters
         ----------
-        newtr : an instance of a subclass of Model
+        model : an instance of a subclass of Model
         mode :  string
                'parallel', 'serial', 'p' or 's'
                a flag indicating whether to combine the models
@@ -265,9 +267,9 @@ class Model(object):
         """
 
         if mode in ['parallel', 'p']:
-            return SummedCompositeModel([self, newtr])
+            return SummedCompositeModel([self, model])
         elif mode in ['serial', 's']:
-            return SerialCompositeModel([self, newtr])
+            return SerialCompositeModel([self, model])
         else:
             raise InputParameterError("Unrecognized mode {0}".format(mode))
 
@@ -292,35 +294,31 @@ class ParametricModel(Model):
     Parameters
     ----------
     param_dim : int
-        number of parameter sets
-    fittable : bool
-        indicator if the model is fittable
-    fixed : a dict
-        a dictionary ``{parameter_name: boolean}`` of parameters to not be
+        Number of parameter sets
+    fixed : dict
+        Dictionary ``{parameter_name: boolean}`` of parameters to not be
         varied during fitting. True means the parameter is held fixed.
-        Alternatively the `~astropy.modeling.parameters.Parameter.fixed`
+        Alternatively the `~astropy.modeling.Parameter.fixed`
         property of a parameter may be used.
     tied : dict
-        a dictionary ``{parameter_name: callable}`` of parameters which are
+        Dictionary ``{parameter_name: callable}`` of parameters which are
         linked to some other parameter. The dictionary values are callables
         providing the linking relationship.
-        Alternatively the `~astropy.modeling.parameters.Parameter.tied`
+        Alternatively the `~astropy.modeling.Parameter.tied`
         property of a parameter may be used.
     bounds : dict
-        a dictionary ``{parameter_name: boolean}`` of lower and upper bounds of
+        Dictionary ``{parameter_name: boolean}`` of lower and upper bounds of
         parameters. Keys are parameter names. Values are a list of length 2
         giving the desired range for the parameter.  Alternatively the
-        `~astropy.modeling.parameters.Parameter.min` and
-        `~astropy.modeling.parameters.Parameter.max` properties of a parameter
+        `~astropy.modeling.Parameter.min` and
+        `~astropy.modeling.Parameter.max` properties of a parameter
         may be used.
     eqcons : list
-        A list of functions of length n such that
-        ``eqcons[j](x0, *args) == 0.0`` in a successfully optimized
-        problem.
+        List of functions of length n such that ``eqcons[j](x0, *args) == 0.0``
+        in a successfully optimized problem.
     ineqcons : list
-        A list of functions of length n such that
-        ``ieqcons[j](x0, *args) >= 0.0`` is a successfully optimized
-        problem.
+        List of functions of length n such that ``ieqcons[j](x0, *args) >=
+        0.0`` is a successfully optimized problem.
 
     Examples
     --------
@@ -362,10 +360,11 @@ class ParametricModel(Model):
     """
 
     linear = False
-    deriv = None
-    # Flag that indicates if the model derivatives are given in columns
-    # or rows
-    col_deriv = True
+    # derivative with respect to parameters
+    fit_deriv = None
+    # Flag that indicates if the model derivatives with respect to parameters
+    # are given in columns or rows
+    col_fit_deriv = True
     fittable = True
 
 
@@ -400,7 +399,7 @@ class ParametricModel(Model):
                 max_param_dim = max(max_param_dim, np.size(value))
 
             if name not in param_names:
-                raise ValueError(
+                raise TypeError(
                     "Unrecognized parameter: {0}".format(name))
 
         if param_dim is None:
@@ -456,10 +455,12 @@ class ParametricModel(Model):
 
     @property
     def eqcons(self):
+        """List of parameter equality constraints."""
         return self._eqcons
 
     @property
     def ineqcons(self):
+        """List of parameter inequality constraints."""
         return self._ineqcons
 
     @property
@@ -564,50 +565,12 @@ class ParametricModel(Model):
 
     def set_joint_parameters(self, jparams):
         """
-        Used by the `JointFitter` class to store parameters which are
-        considered common for several models and are to be fitted together.
+        Used by the `~astropy.modeling.fitting.JointFitter` class to store
+        parameters which are considered common for several models and are to be
+        fitted together.
         """
+
         self.joint = jparams
-
-    def _model_to_fit_params(self):
-        """
-        Create a set of parameters to be fitted.
-
-        These may be a subset of the model parameters, if some of them are held
-        constant or tied.
-        """
-        fitparam_indices = range(len(self.param_names))
-        if any(self.fixed.values()) or any(self.tied.values()):
-            params = list(self.parameters)
-            for idx, name in list(enumerate(self.param_names))[::-1]:
-                if self.fixed[name] or self.tied[name]:
-                    sl = self._param_metrics[name][0]
-                    del params[sl]
-                    del fitparam_indices[idx]
-            return (np.array(params), fitparam_indices)
-        else:
-            return (self.parameters, fitparam_indices)
-
-    def _fitter_to_model_params(self, fps):
-        _fit_params, _fit_param_indices = self._model_to_fit_params()
-        if any(self.fixed.values()) or any(self.tied.values()):
-            self.parameters[_fit_param_indices] = fps
-            for idx, name in enumerate(self.param_names):
-                if self.tied[name] != False:
-                    value = self.tied[name](self)
-                    slice_ = self._param_metrics[name][0]
-                    self.parameters[slice_] = value
-        elif any([tuple(b) != (None, None) for b in self.bounds.values()]):
-            for name, par in zip(self.param_names, _fit_params):
-                if self.bounds[name] != (None, None):
-                    b = self.bounds[name]
-                    if b[0] is not None:
-                        par = max(par, self.bounds[name][0])
-                    if b[1] is not None:
-                        par = min(par, self.bounds[name][1])
-                    setattr(self, name, par)
-        else:
-            self.parameters = fps
 
     def _initialize_parameters(self, params):
         """
@@ -694,7 +657,7 @@ class ParametricModel(Model):
         example.
         """
 
-        fitparam_indices = range(len(self.param_names))
+        fitparam_indices = list(range(len(self.param_names)))
         if any(self.fixed.values()) or any(self.tied.values()):
             params = list(self.parameters)
             for idx, name in list(enumerate(self.param_names))[::-1]:
@@ -712,12 +675,12 @@ class LabeledInput(dict):
     Create a container with all input data arrays, assigning labels for
     each one.
 
-    Used by CompositeModel to choose input data using labels
+    Used by CompositeModel to choose input data using labels.
 
     Parameters
     ----------
     data : list
-        a list of all input data
+        List of all input data
     labels : list of strings
         names matching each coordinate in data
 
@@ -728,21 +691,21 @@ class LabeledInput(dict):
 
     Examples
     --------
-    >>> x,y = np.mgrid[:5, :5]
+    >>> y, x = np.mgrid[:5, :5]
     >>> l = np.arange(10)
-    >>> ado = LabeledInput([x, y, l], ['x', 'y', 'pixel'])
-    >>> ado.x
-    array([[0, 0, 0, 0, 0],
-           [1, 1, 1, 1, 1],
-           [2, 2, 2, 2, 2],
-           [3, 3, 3, 3, 3],
-           [4, 4, 4, 4, 4]])
-    >>> ado['x']
-    array([[0, 0, 0, 0, 0],
-           [1, 1, 1, 1, 1],
-           [2, 2, 2, 2, 2],
-           [3, 3, 3, 3, 3],
-           [4, 4, 4, 4, 4]])
+    >>> labeled_input = LabeledInput([x, y, l], ['x', 'y', 'pixel'])
+    >>> labeled_input.x
+    array([[0, 1, 2, 3, 4],
+           [0, 1, 2, 3, 4],
+           [0, 1, 2, 3, 4],
+           [0, 1, 2, 3, 4],
+           [0, 1, 2, 3, 4]])
+    >>> labeled_input['x']
+    array([[0, 1, 2, 3, 4],
+           [0, 1, 2, 3, 4],
+           [0, 1, 2, 3, 4],
+           [0, 1, 2, 3, 4],
+           [0, 1, 2, 3, 4]])
     """
 
     def __init__(self, data, labels):
@@ -777,7 +740,7 @@ class LabeledInput(dict):
         value : numerical type
             coordinate value
         kw : dictionary
-            if given this is a dictionary of {label: value} pairs
+            if given this is a dictionary of ``{label: value}`` pairs
         """
 
         if kw:
@@ -883,7 +846,7 @@ class SerialCompositeModel(_CompositeModel):
 
         >>> import numpy as np
         >>> from astropy.modeling import models, LabeledInput, SerialCompositeModel
-        >>> x, y = np.mgrid[:5, :5]
+        >>> y, x = np.mgrid[:5, :5]
         >>> rotation = models.MatrixRotation2D(angle=23.5)
         >>> offset_x = models.Shift(-4.23)
         >>> offset_y = models.Shift(2)

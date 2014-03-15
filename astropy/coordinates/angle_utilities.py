@@ -329,7 +329,7 @@ def parse_angle(angle, unit=None, debug=False):
             * -1h2m3s
 
     unit : `~astropy.units.UnitBase` instance, optional
-        The unit used to interpret the string.  If `unit` is not
+        The unit used to interpret the string.  If ``unit`` is not
         provided, the unit must be explicitly represented in the
         string, either at the end or as number separators.
 
@@ -339,8 +339,8 @@ def parse_angle(angle, unit=None, debug=False):
     Returns
     -------
     value, unit : tuple
-        `value` is the value as a floating point number or three-part
-        tuple, and `unit` is a `Unit` instance which is either the
+        ``value`` is the value as a floating point number or three-part
+        tuple, and ``unit`` is a `Unit` instance which is either the
         unit passed in or the one explicitly mentioned in the input
         string.
     """
@@ -527,7 +527,9 @@ def sexagesimal_to_string(values, precision=None, pad=False, sep=(':',),
     if not isinstance(sep, tuple):
         sep = tuple(sep)
 
-    if len(sep) == 1:
+    if not sep:  # empty string, False, or None, etc.
+        sep = ('', '', '')
+    elif len(sep) == 1:
         sep = sep + (sep[0], '')
     elif len(sep) == 2:
         sep = sep + ('',)
@@ -588,7 +590,7 @@ def hours_to_string(h, precision=5, pad=False, sep=('h', 'm', 's'),
     Takes a decimal hour value and returns a string formatted as hms with
     separator specified by the 'sep' parameter.
 
-    `h` must be a scalar.
+    ``h`` must be a scalar.
     """
     h, m, s = hours_to_hms(h)
     return sexagesimal_to_string((h, m, s), precision=precision, pad=pad,
@@ -600,7 +602,7 @@ def degrees_to_string(d, precision=5, pad=False, sep=':', fields=3):
     Takes a decimal hour value and returns a string formatted as dms with
     separator specified by the 'sep' parameter.
 
-    `d` must be a scalar.
+    ``d`` must be a scalar.
     """
     d, m, s = degrees_to_dms(d)
     return sexagesimal_to_string((d, m, s), precision=precision, pad=pad,
@@ -613,14 +615,15 @@ def angular_separation(lon1, lat1, lon2, lat2):
 
     Parameters
     ----------
-    lon1, lat1, lon2, lat2 : Angle, Quantity or float
-        Longitude and latitude of the two points.  Quantities should be in
-        angular units; floats in radians
+    lon1, lat1, lon2, lat2 : `Angle`, `~astropy.units.Quantity` or float
+        Longitude and latitude of the two points. Quantities should be in
+        angular units; floats in radians.
 
     Returns
     -------
-    angular separation : Quantity or float
-        Type depends on input; Quantity in angular units, or float in radians
+    angular separation : `~astropy.units.Quantity` or float
+        Type depends on input; `Quantity` in angular units, or float in
+        radians.
 
     Notes
     -----

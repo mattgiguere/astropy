@@ -1,7 +1,7 @@
 Quantity
 ========
 
-.. |quantity| replace:: :class:`~astropy.units.quantity.Quantity`
+.. |quantity| replace:: :class:`~astropy.units.Quantity`
 
 The |quantity| object is meant to represent a value that has some unit
 associated with the number.
@@ -10,7 +10,7 @@ Creating Quantity instances
 ---------------------------
 
 |quantity| objects are created through multiplication or division with
-:class:`~astropy.units.core.Unit` objects. For example, to create a |quantity|
+:class:`~astropy.units.Unit` objects. For example, to create a |quantity|
 to represent 15 m/s:
 
     >>> import astropy.units as u
@@ -159,7 +159,7 @@ Numpy functions
 ---------------
 
 |quantity| objects are actually full Numpy arrays (the |quantity|
-object class inherits from and extends the `numpy.ndarray` class), and
+object class inherits from and extends the ``numpy.ndarray`` class), and
 we have tried to ensure that most Numpy functions behave properly with
 units:
 
@@ -229,8 +229,8 @@ The result is independent from the units the different quantities were specified
     >>> np.exp(- h * nu / (k_B * T))
     <Quantity 0.99521225...>
 
-Converting to plain Python scalars or Numpy arrays
---------------------------------------------------
+Converting to plain Python scalars
+----------------------------------
 
 Converting |quantity| objects does not work for non-dimensionless quantities:
 
@@ -271,8 +271,17 @@ quantities:
     >>> int(6. * u.m / (2. * u.m))
     3
 
-Since |quantity| objects are actual Numpy arrays, we are not able to ensure
+Known issues with conversion to numpy arrays
+--------------------------------------------
+
+Since |quantity| objects are Numpy arrays, we are not able to ensure
 that only dimensionless quantities are converted to Numpy arrays:
 
     >>> np.array([1, 2, 3] * u.m)
     array([ 1., 2., 3.])
+
+Similarly, while most numpy functions work properly, a few have
+:ref:`known issues <quantity_issues>`, either ignoring the unit (e.g.,
+``np.dot``) or not reinitializing it properly (e.g., ``np.hstack``).  This
+propagates to more complex functions such as ``np.linalg.norm`` and
+``scipy.integrate.odeint``.

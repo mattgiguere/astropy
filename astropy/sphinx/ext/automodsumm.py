@@ -39,6 +39,15 @@ options:
         and not have their documentation generated, nor be includded in
         the summary table.
 
+This extension also adds one sphinx configuration option:
+
+* `automodsumm_writereprocessed`
+    Should be a bool, and if True, will cause `automodsumm` to write files with
+    any ``automodsumm``  sections replaced with the content Sphinx processes
+    after ``automodsumm`` has run.   The output files are not actually used by
+    sphinx, so this option is only for figuring out the cause of sphinx warnings
+    or other debugging.   Defaults to `False`.
+
 
 ===========================
 `automod-diagram` directive
@@ -90,14 +99,17 @@ class Automodsumm(AstropyAutosummary):
     option_spec['skip'] = _str_list_converter
 
     def run(self):
+        env = self.state.document.settings.env
+        modname = self.arguments[0]
+
         self.warnings = []
         nodelist = []
 
         try:
-            localnames, fqns, objs = find_mod_objs(self.arguments[0])
+            localnames, fqns, objs = find_mod_objs(modname)
         except ImportError:
             self.warnings = []
-            self.warn("Couldn't import module " + self.arguments[0])
+            self.warn("Couldn't import module " + modname)
             return self.warnings
 
         try:
@@ -106,35 +118,40 @@ class Automodsumm(AstropyAutosummary):
             funconly = 'functions-only' in self.options
             clsonly = 'classes-only' in self.options
 
-            skipmap = {}
+            skipnames = []
             if 'skip' in self.options:
-                skipnames = set(self.options['skip'])
-                for lnm, fqnm in zip(localnames, fqns):
-                    if lnm in skipnames:
-                        skipnames.remove(lnm)
-                        skipmap[fqnm] = lnm
-                if len(skipnames) > 0:
+                option_skipnames = set(self.options['skip'])
+                for lnm in localnames:
+                    if lnm in option_skipnames:
+                        option_skipnames.remove(lnm)
+                        skipnames.append(lnm)
+                if len(option_skipnames) > 0:
                     self.warn('Tried to skip objects {objs} in module {mod}, '
                               'but they were not present.  Ignoring.'.format(
-                              objs=skipnames, mod=self.arguments[0]))
+                              objs=option_skipnames, mod=modname))
 
             if funconly and not clsonly:
                 cont = []
-                for nm, obj in zip(fqns, objs):
-                    if nm not in skipmap and inspect.isfunction(obj):
-                        cont.append('~' + nm)
+                for nm, obj in zip(localnames, objs):
+                    if nm not in skipnames and inspect.isfunction(obj):
+                        cont.append(nm)
             elif clsonly:
                 cont = []
-                for nm, obj in zip(fqns, objs):
-                    if nm not in skipmap and inspect.isclass(obj):
-                        cont.append('~' + nm)
+                for nm, obj in zip(localnames, objs):
+                    if nm not in skipnames and inspect.isclass(obj):
+                        cont.append(nm)
             else:
                 if clsonly and funconly:
                     self.warning('functions-only and classes-only both '
                                  'defined. Skipping.')
-                cont = ['~' + nm for nm in fqns if nm not in skipmap]
+                cont = [nm for nm in localnames if nm not in skipnames]
 
             self.content = cont
+
+            #for some reason, even though ``currentmodule`` is substituted in, sphinx
+            #doesn't necessarily recognize this fact.  So we just force it
+            #internally, and that seems to fix things
+            env.temp_data['py:module'] = modname
 
             #can't use super because Sphinx/docutils has trouble
             #return super(Autosummary,self).run()
@@ -177,8 +194,17 @@ def process_automodsumm_generation(app):
     filestosearch = [x + ext for x in env.found_docs
                      if os.path.isfile(env.doc2path(x))]\
 
-    liness = [automodsumm_to_autosummary_lines(sfn, app) for
-              sfn in filestosearch]
+    liness = []
+    for sfn in filestosearch:
+        lines = automodsumm_to_autosummary_lines(sfn, app)
+        liness.append(lines)
+        if app.config.automodsumm_writereprocessed:
+            if lines:  # empty list means no automodsumm entry is in the file
+                outfn = os.path.join(app.srcdir, sfn) + '.automodsumm'
+                with open(outfn, 'w') as f:
+                    for l in lines:
+                        f.write(l)
+                        f.write('\n')
 
     for sfn, lines in zip(filestosearch, liness):
         if len(lines) > 0:
@@ -273,7 +299,13 @@ def automodsumm_to_autosummary_lines(fn, app):
             app.warn('[automodsumm]' + msg, (fn, lnnum))
             continue
 
-        newlines.append(i1 + '.. autosummary::')
+        # Use the currentmodule directive so we can just put the local names
+        # in the autosummary table.  Note that this doesn't always seem to
+        # actually "take" in Sphinx's eyes, so in `Automodsumm.run`, we have to
+        # force it internally, as well.
+        newlines.extend([i1 + '.. currentmodule:: ' + modnm,
+                         '',
+                         '.. autosummary::'])
         newlines.extend(oplines)
 
         for nm, fqn, obj in zip(*find_mod_objs(modnm, onlylocals=True)):
@@ -283,7 +315,7 @@ def automodsumm_to_autosummary_lines(fn, app):
                 continue
             if clssonly and not inspect.isclass(obj):
                 continue
-            newlines.append(allindent + '~' + fqn)
+            newlines.append(allindent + nm)
 
     return newlines
 
@@ -361,7 +393,7 @@ def generate_automodsumm_docs(lines, srcfn, suffix='.rst', warn=None,
         try:
             name, obj, parent = import_by_name(name)
         except ImportError, e:
-            warn('[automodapi] failed to import %r: %s' % (name, e))
+            warn('[automodsumm] failed to import %r: %s' % (name, e))
             continue
 
         fn = os.path.join(path, name + suffix)
@@ -444,9 +476,10 @@ def generate_automodsumm_docs(lines, srcfn, suffix='.rst', warn=None,
                 ns['exceptions'], ns['all_exceptions'] = \
                                    get_members_mod(obj, 'exception')
             elif doc.objtype == 'class':
+                api_class_methods = ['__init__', '__call__']
                 ns['members'] = get_members_class(obj, None)
                 ns['methods'], ns['all_methods'] = \
-                                 get_members_class(obj, 'method', ['__init__'])
+                                 get_members_class(obj, 'method', api_class_methods)
                 ns['attributes'], ns['all_attributes'] = \
                                  get_members_class(obj, 'attribute')
                 ns['methods'].sort()
@@ -469,7 +502,7 @@ def generate_automodsumm_docs(lines, srcfn, suffix='.rst', warn=None,
             ns['objtype'] = doc.objtype
             ns['underline'] = len(name) * '='
 
-            # We now check whether a file for reference footnotes exists for 
+            # We now check whether a file for reference footnotes exists for
             # the module being documented. We first check if the
             # current module is a file or a directory, as this will give a
             # different path for the reference file. For example, if
@@ -487,11 +520,11 @@ def generate_automodsumm_docs(lines, srcfn, suffix='.rst', warn=None,
                 mod_name_dir = mod_name_dir.rsplit('/', 1)[0]
 
             # We then have to check whether it exists, and if so, we pass it
-            # to the template.  
+            # to the template.
             if os.path.exists(os.path.join(base_path, mod_name_dir, 'references.txt')):
-                # An important subtlety here is that the path we pass in has 
+                # An important subtlety here is that the path we pass in has
                 # to be relative to the file being generated, so we have to
-                # figure out the right number of '..'s 
+                # figure out the right number of '..'s
                 ndirsback = path.replace(base_path, '').count('/')
                 ref_file_rel_segments = ['..'] * ndirsback
                 ref_file_rel_segments.append(mod_name_dir)
@@ -513,3 +546,5 @@ def setup(app):
     app.add_directive('automod-diagram', Automoddiagram)
     app.add_directive('automodsumm', Automodsumm)
     app.connect('builder-inited', process_automodsumm_generation)
+
+    app.add_config_value('automodsumm_writereprocessed', False, True)

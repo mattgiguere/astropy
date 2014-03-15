@@ -20,6 +20,7 @@ import os
 import subprocess
 import shutil
 import tempfile
+import types
 import warnings
 
 try:
@@ -33,6 +34,7 @@ except ImportError:
 from distutils.core import Command
 
 from .. import test
+from ..utils.exceptions import AstropyWarning
 
 if os.environ.get('ASTROPY_USE_SYSTEM_PYTEST') or '_pytest' in sys.modules:
     import pytest
@@ -40,14 +42,14 @@ if os.environ.get('ASTROPY_USE_SYSTEM_PYTEST') or '_pytest' in sys.modules:
 else:
     from ..extern import pytest as extern_pytest
 
-    if sys.version_info >= (3, 0):
+    if six.PY3:
         exec("def do_exec_def(co, loc): exec(co, loc)\n")
         extern_pytest.do_exec = do_exec_def
 
         unpacked_sources = extern_pytest.sources.encode("ascii")
         unpacked_sources = pickle.loads(
-            zlib.decompress(base64.decodebytes(unpacked_sources)))
-    else:
+            zlib.decompress(base64.decodebytes(unpacked_sources)), encoding='utf-8')
+    elif six.PY2:
         exec("def do_exec_def(co, loc): exec co in loc\n")
         extern_pytest.do_exec = do_exec_def
 
@@ -61,7 +63,7 @@ else:
     # argparse before importing py.test, since it isn't in the
     # standard library, and py.test's workaround doesn't appear to
     # work with the "absolute imports" of Python 3.x.
-    if sys.version_info[0] == 3 and sys.version_info[1] <= 1:
+    if six.PY3 and sys.version_info[1] <= 1:
         argparse = importer.load_module(str('argparse'))
     pytest = importer.load_module(str('pytest'))
 
@@ -116,6 +118,15 @@ class TestRunner(object):
         # own.
         from ..table import Table
 
+        if coverage:
+            warnings.warn(
+                "The coverage option is ignored on run_tests, since it "
+                "can not be made to work in that context.  Use "
+                "'python setup.py test --coverage' instead.",
+                AstropyWarning)
+
+        all_args = ''
+
         if package is None:
             package_path = self.base_path
         else:
@@ -125,21 +136,35 @@ class TestRunner(object):
             if not os.path.isdir(package_path):
                 raise ValueError('Package not found: {0}'.format(package))
 
-        if test_path:
-            package_path = os.path.join(package_path,
-                                        os.path.abspath(test_path))
-
-        all_args = package_path
-
         if docs_path is not None and not skip_docs:
             if package is not None:
                 docs_path = os.path.join(
                     docs_path, package.replace('.', os.path.sep))
             if not os.path.exists(docs_path):
-                raise ValueError(
+                warnings.warn(
                     "Can not test .rst docs, since docs path "
                     "({0}) does not exist.".format(docs_path))
-            all_args += ' ' + docs_path + ' --doctest-rst '
+
+        if test_path:
+            base, ext = os.path.splitext(test_path)
+            if ext == '.py':
+                test_path = os.path.join(package_path,
+                                         os.path.abspath(test_path))
+                all_args += test_path
+            elif ext == '.rst':
+                if docs_path is None:
+                    # This shouldn't happen from "python setup.py test"
+                    raise ValueError(
+                        "Can not test .rst files without a docs_path specified.")
+                else:
+                    test_path = os.path.join(docs_path, test_path)
+                    all_args += test_path
+            else:
+                raise ValueError("Test file path must be to a .py or .rst file")
+        else:
+            all_args = package_path
+            if docs_path is not None and not skip_docs:
+                all_args += ' ' + docs_path + ' --doctest-rst '
 
         # add any additional args entered by the user
         if args is not None:
@@ -172,38 +197,6 @@ class TestRunner(object):
         # activate post-mortem PDB for failing tests
         if pdb:
             all_args += ' --pdb'
-
-        if coverage:
-            try:
-                import pytest_cov
-            except ImportError:
-                raise ImportError(
-                    'Coverage reporting requires pytest-cov plugin: '
-                    'http://pypi.python.org/pypi/pytest-cov')
-            else:
-                # Don't use get_pkg_data_filename here, because it
-                # requires importing astropy.config and thus screwing
-                # up coverage results for those packages.
-                coveragerc = os.path.join(
-                    os.path.dirname(__file__), 'coveragerc')
-
-                # We create a coveragerc that is specific to the version
-                # of Python we're running, so that we can mark branches
-                # as being specifically for Python 2 or Python 3
-                with open(coveragerc, 'r') as fd:
-                    coveragerc_content = fd.read()
-                if sys.version_info[0] >= 3:
-                    ignore_python_version = '2'
-                else:
-                    ignore_python_version = '3'
-                coveragerc_content = coveragerc_content.replace(
-                    "{ignore_python_version}", ignore_python_version)
-                with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                    tmp.write(coveragerc_content.encode('utf-8'))
-
-                all_args += (
-                    ' --cov-report html --cov astropy'
-                    ' --cov-config {0}'.format(tmp.name))
 
         # check for opened files after each test
         if open_files:
@@ -242,16 +235,10 @@ class TestRunner(object):
         if sys.version_info < (2, 7, 3):
             all_args = all_args.encode('utf-8')
 
-        try:
-            all_args = shlex.split(
-                all_args, posix=not sys.platform.startswith('win'))
+        all_args = shlex.split(
+            all_args, posix=not sys.platform.startswith('win'))
 
-            result = pytest.main(args=all_args, plugins=plugins)
-        finally:
-            if coverage:
-                if not tmp.closed:
-                    tmp.close()
-                os.remove(tmp.name)
+        result = pytest.main(args=all_args, plugins=plugins)
 
         return result
 
@@ -270,48 +257,78 @@ def _fix_user_options(options):
     return [tuple(to_str_or_none(x) for x in y) for y in options]
 
 
+def _save_coverage(cov, result, rootdir, testing_path):
+    """
+    This method is called after the tests have been run in coverage mode
+    to cleanup and then save the coverage data and report.
+    """
+    from ..utils.console import color_print
+
+    if result != 0:
+        return
+
+    # The coverage report includes the full path to the temporary
+    # directory, so we replace all the paths with the true source
+    # path. This means that the coverage line-by-line report will only
+    # be correct for Python 2 code (since the Python 3 code will be
+    # different in the build directory from the source directory as
+    # long as 2to3 is needed). Therefore we only do this fix for
+    # Python 2.x.
+    if six.PY2:
+        d = cov.data
+        cov._harvest_data()
+        for key in d.lines.keys():
+            new_path = os.path.relpath(
+                os.path.realpath(key),
+                os.path.realpath(testing_path))
+            new_path = os.path.abspath(
+                os.path.join(rootdir, new_path))
+            d.lines[new_path] = d.lines.pop(key)
+
+    color_print('Saving coverage data in .coverage...', 'green')
+    cov.save()
+
+    color_print('Saving HTML coverage report in htmlcov...', 'green')
+    cov.html_report(directory=os.path.join(rootdir, 'htmlcov'))
+
+
 class astropy_test(Command, object):
     user_options = [
         ('package=', 'P',
          "The name of a specific package to test, e.g. 'io.fits' or 'utils'.  "
-         "If nothing is specified all default Astropy tests are run."),
+         "If nothing is specified, all default tests are run."),
         ('test-path=', 't',
-         'Specify a test location by path. Must be '
-         'specified absolutely or relative to the current directory. '
-         'May be a single file or directory.'),
+         'Specify a test location by path.  If a relative path to a '
+         '.py file, it is relative to the built package.  If a relative '
+         'path to a .rst file, it is relative to the docs directory '
+         '(see --docs-path).  May also be an absolute path.'),
         ('verbose-results', 'V',
-         'Turn on verbose output from pytest. Same as specifying `-v` in '
-         '`args`.'),
+         'Turn on verbose output from pytest.'),
         ('plugins=', 'p',
-         'Plugins to enable when running pytest.  Same as specifying `-p` in '
-         '`args`.'),
+         'Plugins to enable when running pytest.'),
         ('pastebin=', 'b',
          "Enable pytest pastebin output. Either 'all' or 'failed'."),
         ('args=', 'a',
-         'Additional arguments to be passed to pytest'),
-        ('remote-data', 'R', 'Run tests that download remote data'),
+         'Additional arguments to be passed to pytest.'),
+        ('remote-data', 'R', 'Run tests that download remote data.'),
         ('pep8', '8',
          'Enable PEP8 checking and disable regular tests. '
-         'Same as specifying `--pep8 -k pep8` in `args`. Requires the '
-         'pytest-pep8 plugin.'),
+         'Requires the pytest-pep8 plugin.'),
         ('pdb', 'd',
-         'Turn on PDB post-mortem analysis for failing tests. '
-         'Same as specifying `--pdb` in `args`.'),
+         'Start the interactive Python debugger on errors.'),
         ('coverage', 'c',
-         'Create a coverage report. Requires the pytest-cov '
-         'plugin is installed'),
-        ('open-files', 'o', 'Fail if any tests leave files open'),
+         'Create a coverage report. Requires the coverage package.'),
+        ('open-files', 'o', 'Fail if any tests leave files open.'),
         ('parallel=', 'n',
-         'Run the tests in parallel on the specified '
-         'number of CPUs.  If parallel is negative, it will use the all '
-         'the cores on the machine.  Requires the `pytest-xdist` plugin '
-         'is installed.'),
+         'Run the tests in parallel on the specified number of '
+         'CPUs.  If negative, all the cores on the machine will be '
+         'used.  Requires the pytest-xdist plugin.'),
         ('docs-path=', None,
          'The path to the documentation .rst files.  If not provided, and '
          'the current directory contains a directory called "docs", that '
          'will be used.'),
         ('skip-docs', None,
-         "When provided, don't test the documentation .rst files.")
+         "Don't test the documentation .rst files.")
     ]
 
     user_options = _fix_user_options(user_options)
@@ -345,6 +362,10 @@ class astropy_test(Command, object):
         build_cmd = self.get_finalized_command('build')
         new_path = os.path.abspath(build_cmd.build_lib)
 
+        if self.docs_path is None:
+            if os.path.exists('docs'):
+                self.docs_path = os.path.abspath('docs')
+
         # Copy the build to a temporary directory for the purposes of testing
         # - this avoids creating pyc and __pycache__ directories inside the
         # build directory
@@ -353,25 +374,60 @@ class astropy_test(Command, object):
         shutil.copytree(new_path, testing_path)
         shutil.copy('setup.cfg', testing_path)
 
-        if self.docs_path is None:
-            if os.path.exists('docs'):
-                self.docs_path = os.path.abspath('docs')
+        cmd_pre = ''
+        cmd_post = ''
 
         try:
+            if self.coverage:
+                if self.parallel != 0:
+                    raise ValueError(
+                        "--coverage can not be used with --parallel")
 
-            # Run the tests in a subprocess--this is necessary since new extension
-            # modules may have appeared, and this is the easiest way to set up a
-            # new environment
+                try:
+                    import coverage
+                except ImportError:
+                    raise ImportError(
+                        "--coverage requires that the coverage package is "
+                        "installed.")
 
-            # We need to set a flag in the child's environment so that
-            # unnecessary code is not imported before py.test can start
-            # up, otherwise the coverage results will be artifically low.
-            if sys.version_info[0] >= 3:
+                # Don't use get_pkg_data_filename here, because it
+                # requires importing astropy.config and thus screwing
+                # up coverage results for those packages.
+                coveragerc = os.path.join(
+                    testing_path, self.package_name, 'tests', 'coveragerc')
+
+                # We create a coveragerc that is specific to the version
+                # of Python we're running, so that we can mark branches
+                # as being specifically for Python 2 or Python 3
+                with open(coveragerc, 'r') as fd:
+                    coveragerc_content = fd.read()
+                if six.PY3:
+                    ignore_python_version = '2'
+                elif six.PY2:
+                    ignore_python_version = '3'
+                coveragerc_content = coveragerc_content.replace(
+                    "{ignore_python_version}", ignore_python_version)
+                tmp_coveragerc = os.path.join(tmp_dir, 'coveragerc')
+                with open(tmp_coveragerc, 'wb') as tmp:
+                    tmp.write(coveragerc_content.encode('utf-8'))
+
+                cmd_pre = (
+                    'import coverage; '
+                    'cov = coverage.coverage(data_file="{0}", config_file="{1}"); '
+                    'cov.start();'.format(
+                        os.path.abspath(".coverage"), tmp_coveragerc))
+                cmd_post = (
+                    'cov.stop(); '
+                    'from astropy.tests.helper import _save_coverage; '
+                    '_save_coverage(cov, result, "{0}", "{1}");'.format(
+                        os.path.abspath('.'), testing_path))
+
+            if six.PY3:
                 set_flag = "import builtins; builtins._ASTROPY_TEST_ = True"
-            else:
+            elif six.PY2:
                 set_flag = "import __builtin__; __builtin__._ASTROPY_TEST_ = True"
 
-            cmd = ('{0}; import {1.package_name}, sys; sys.exit('
+            cmd = ('{cmd_pre}{0}; import {1.package_name}, sys; result = ('
                    '{1.package_name}.test('
                    'package={1.package!r}, '
                    'test_path={1.test_path!r}, '
@@ -382,12 +438,13 @@ class astropy_test(Command, object):
                    'remote_data={1.remote_data!r}, '
                    'pep8={1.pep8!r}, '
                    'pdb={1.pdb!r}, '
-                   'coverage={1.coverage!r}, '
                    'open_files={1.open_files!r}, '
                    'parallel={1.parallel!r}, '
                    'docs_path={1.docs_path!r}, '
-                   'skip_docs={1.skip_docs!r}))')
-            cmd = cmd.format(set_flag, self)
+                   'skip_docs={1.skip_docs!r})); '
+                   '{cmd_post}'
+                   'sys.exit(result)')
+            cmd = cmd.format(set_flag, self, cmd_pre=cmd_pre, cmd_post=cmd_post)
 
             # override the config locations to not make a new directory nor use
             # existing cache or config
@@ -396,6 +453,9 @@ class astropy_test(Command, object):
             os.mkdir(os.path.join(os.environ['XDG_CONFIG_HOME'], 'astropy'))
             os.mkdir(os.path.join(os.environ['XDG_CACHE_HOME'], 'astropy'))
 
+            # Run the tests in a subprocess--this is necessary since
+            # new extension modules may have appeared, and this is the
+            # easiest way to set up a new environment
             try:
                 retcode = subprocess.call([sys.executable, '-c', cmd],
                                           cwd=testing_path, close_fds=False)
@@ -403,36 +463,6 @@ class astropy_test(Command, object):
                 # kill the temporary dirs
                 shutil.rmtree(os.environ['XDG_CONFIG_HOME'])
                 shutil.rmtree(os.environ['XDG_CACHE_HOME'])
-
-            if self.coverage and retcode == 0:
-
-                # Copy the htmlcov from build/lib.../htmlcov to a more
-                # obvious place
-                if os.path.exists('htmlcov'):
-                    shutil.rmtree('htmlcov')
-                shutil.copytree(os.path.join(testing_path, 'htmlcov'), 'htmlcov')
-
-                # The coverage report includes the full path to the temporary
-                # directory, so we replace all the paths with the true source
-                # path. This means that the coverage line-by-line report will
-                # only be correct for Python 2 code (since the Python 3 code
-                # will be different in the build directory from the source
-                # directory as long as 2to3 is needed). Therefore we only do
-                # this fix for Python 2.x.
-
-                if six.PY2:
-                    import coverage
-                    d = coverage.CoverageData()
-                    d.read_file(os.path.join(testing_path, '.coverage'))
-                    for key in d.lines.keys():
-                        new_path = os.path.relpath(os.path.realpath(key),
-                                                   os.path.realpath(testing_path))
-                        new_path = os.path.abspath(new_path)
-                        d.lines[new_path] = d.lines.pop(key)
-                    d.write()
-                else:
-                    shutil.copy2(os.path.join(testing_path, '.coverage'), '.coverage')
-
         finally:
 
             # Remove temporary directory
@@ -461,6 +491,67 @@ class raises(object):
         return run_raises_test
 
 
+def treat_deprecations_as_exceptions():
+    """
+    Turn all DeprecationWarnings (which indicate deprecated uses of
+    Python itself or Numpy, but not within Astropy, where we use our
+    own deprecation warning class) into exceptions so that we find
+    out about them early.
+
+    This completely resets the warning filters and any "already seen"
+    warning state.
+    """
+    # First, totally reset the warning state
+    for module in list(six.itervalues(sys.modules)):
+        # We don't want to deal with six.MovedModules, only "real"
+        # modules.
+        if (isinstance(module, types.ModuleType) and
+            hasattr(module, '__warningregistry__')):
+            del module.__warningregistry__
+
+    warnings.resetwarnings()
+
+    # Hide the next couple of DeprecationWarnings
+    warnings.simplefilter('ignore', DeprecationWarning)
+    # Here's the wrinkle: a couple of our third-party dependencies
+    # (py.test and scipy) are still using deprecated features
+    # themselves, and we'd like to ignore those.  Fortunately, those
+    # show up only at import time, so if we import those things *now*,
+    # before we turn the warnings into exceptions, we're golden.
+    try:
+        # A deprecated stdlib module used by py.test
+        import compiler
+    except ImportError:
+        pass
+
+    try:
+        import scipy
+    except ImportError:
+        pass
+
+    # Now, start over again with the warning filters
+    warnings.resetwarnings()
+    # Now, turn DeprecationWarnings into exceptions
+    warnings.filterwarnings("error", ".*", DeprecationWarning)
+
+    if sys.version_info[:2] == (2, 6):
+        # py.test's warning.showwarning does not include the line argument
+        # on Python 2.6, so we need to explicitly ignore this warning.
+        warnings.filterwarnings(
+            "always",
+            r"functions overriding warnings\.showwarning\(\) must support "
+            r"the 'line' argument",
+            DeprecationWarning)
+
+    if sys.version_info[:2] >= (3, 4):
+        # py.test reads files with the 'U' flag, which is now
+        # deprecated in Python 3.4.
+        warnings.filterwarnings(
+            "always",
+            r"'U' mode is deprecated",
+            DeprecationWarning)
+
+
 class catch_warnings(warnings.catch_warnings):
     """
     A high-powered version of warnings.catch_warnings to use for testing
@@ -480,15 +571,12 @@ class catch_warnings(warnings.catch_warnings):
         assert len(w) > 0
     """
     def __init__(self, *classes):
-        for module in list(six.itervalues(sys.modules)):
-            if hasattr(module, '__warningregistry__'):
-                del module.__warningregistry__
         super(catch_warnings, self).__init__(record=True)
         self.classes = classes
 
     def __enter__(self):
         warning_list = super(catch_warnings, self).__enter__()
-        warnings.resetwarnings()
+        treat_deprecations_as_exceptions()
         if len(self.classes) == 0:
             warnings.simplefilter('always')
         else:
@@ -496,6 +584,9 @@ class catch_warnings(warnings.catch_warnings):
             for cls in self.classes:
                 warnings.simplefilter('always', cls)
         return warning_list
+
+    def __exit__(self, type, value, traceback):
+        treat_deprecations_as_exceptions()
 
 
 def assert_follows_unicode_guidelines(

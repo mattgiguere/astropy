@@ -20,10 +20,15 @@ from .core import (Unit, dimensionless_unscaled, UnitBase, UnitsError,
                    get_current_unit_registry)
 from ..utils import lazyproperty
 from ..utils.compat.misc import override__dir__
-from ..utils.misc import isiterable
+from ..utils.misc import isiterable, InheritDocstrings
+from .utils import validate_power
 
 
 __all__ = ["Quantity"]
+
+
+# We don't want to run doctests in the docstrings we inherit from Numpy
+__doctest_skip__ = ['Quantity.*']
 
 
 def _can_cast(arg, dtype):
@@ -54,6 +59,7 @@ def _can_have_arbitrary_unit(value):
     return np.all(np.logical_or(np.equal(value, 0.), ~np.isfinite(value)))
 
 
+@six.add_metaclass(InheritDocstrings)
 class Quantity(np.ndarray):
     """ A `Quantity` represents a number with some associated unit.
 
@@ -214,14 +220,13 @@ class Quantity(np.ndarray):
         # this as a special case.
         # TODO: find a better way to deal with this case
         if function is np.power and result_unit is not None:
-            if not np.isscalar(args[1]):
-                raise ValueError(
-                    "Quantities may only be raised to a scalar power")
 
             if units[1] is None:
-                result_unit = result_unit ** args[1]
+                p = args[1]
             else:
-                result_unit = result_unit ** args[1].to(dimensionless_unscaled)
+                p = args[1].to(dimensionless_unscaled).value
+
+            result_unit = result_unit ** validate_power(p)
 
         # We now prepare the output object
 
@@ -409,9 +414,8 @@ class Quantity(np.ndarray):
         # patch to pickle Quantity objects (ndarray subclasses),
         # see http://www.mail-archive.com/numpy-discussion@scipy.org/msg02446.html
 
-        object_state = list(np.ndarray.__reduce__(self))
-        subclass_state = (self._unit,)
-        object_state[2] = (object_state[2], subclass_state)
+        object_state = list(super(Quantity, self).__reduce__())
+        object_state[2] = (object_state[2], self.__dict__)
         return tuple(object_state)
 
     def __setstate__(self, state):
@@ -419,10 +423,8 @@ class Quantity(np.ndarray):
         # see http://www.mail-archive.com/numpy-discussion@scipy.org/msg02446.html
 
         nd_state, own_state = state
-        np.ndarray.__setstate__(self, nd_state)
-
-        unit, = own_state
-        self._unit = unit
+        super(Quantity, self).__setstate__(nd_state)
+        self.__dict__.update(own_state)
 
     def to(self, unit, equivalencies=[]):
         """ Returns a new `Quantity` object with the specified units.
@@ -856,7 +858,7 @@ class Quantity(np.ndarray):
 
         Returns
         -------
-        newq : `~astropy.units.quantity.Quantity`
+        newq : `~astropy.units.Quantity`
             A new object equal to this quantity with units decomposed.
         """
         return self._decompose(False, bases=bases)
@@ -883,7 +885,7 @@ class Quantity(np.ndarray):
 
         Returns
         -------
-        newq : `~astropy.units.quantity.Quantity`
+        newq : `~astropy.units.Quantity`
             A new object equal to this quantity with units decomposed.
 
         """

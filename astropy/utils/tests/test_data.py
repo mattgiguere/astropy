@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+
+# TEST_UNICODE_LITERALS
+
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
@@ -258,12 +262,12 @@ def test_read_unicode():
     contents = get_pkg_data_contents('data/unicode.txt', encoding='utf-8')
     assert isinstance(contents, six.text_type)
     contents = contents.splitlines()[1]
-    assert contents == "\u05d4\u05d0\u05e1\u05d8\u05e8\u05d5\u05e0\u05d5\u05de\u05d9 \u05e4\u05d9\u05d9\u05ea\u05d5\u05df"
+    assert contents == "האסטרונומי פייתון"
 
     contents = get_pkg_data_contents('data/unicode.txt', encoding='binary')
     assert isinstance(contents, bytes)
-    contents = contents.splitlines()[1]
-    assert contents == b"\xd7\x94\xd7\x90\xd7\xa1\xd7\x98\xd7\xa8\xd7\x95\xd7\xa0\xd7\x95\xd7\x9e\xd7\x99 \xd7\xa4\xd7\x99\xd7\x99\xd7\xaa\xd7\x95\xd7\x9f"
+    x = contents.splitlines()[1]
+    assert x == b"\xff\xd7\x94\xd7\x90\xd7\xa1\xd7\x98\xd7\xa8\xd7\x95\xd7\xa0\xd7\x95\xd7\x9e\xd7\x99 \xd7\xa4\xd7\x99\xd7\x99\xd7\xaa\xd7\x95\xd7\x9f"[1:]
 
 
 def test_compressed_stream():
@@ -296,6 +300,7 @@ def test_compressed_stream():
         assert f.read().rstrip() == b'CONTENT'
 
 
+@remote_data
 def test_invalid_location_download():
     """
     checks that download_file gives a URLError and not an AttributeError,
@@ -305,4 +310,14 @@ def test_invalid_location_download():
     from ..data import download_file
 
     with pytest.raises(URLError):
+        download_file('http://astropy.org/nonexistentfile')
+
+def test_invalid_location_download_noconnect():
+    """
+    checks that download_file gives an IOError if the socket is blocked
+    """
+    from ..data import download_file
+
+    # This should invoke socket's monkeypatched failure
+    with pytest.raises(IOError):
         download_file('http://astropy.org/nonexistentfile')

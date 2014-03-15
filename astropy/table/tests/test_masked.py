@@ -1,4 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+# TEST_UNICODE_LITERALS
+
 """Test behavior related to masked tables"""
 
 from distutils import version
@@ -8,12 +11,6 @@ import numpy.ma as ma
 from ...tests.helper import pytest
 from ...table import Column, MaskedColumn, Table
 
-class SubclassTable(Table):
-    pass
-
-@pytest.fixture(params = [True, False])
-def tableclass(request):
-    return Table if request.param else SubclassTable
 
 class SetupData(object):
     def setup_method(self, method):
@@ -166,10 +163,10 @@ class TestMaskedColumnInit(SetupData):
         assert np.all(b.mask == mask_list)
 
     def test_incomplete_mask_spec(self):
-        """Incomplete mask specification (mask values cycle through available)"""
+        """Incomplete mask specification raises MaskError"""
         mask_list = [False, True]
-        b = MaskedColumn(name='b', length=4, mask=mask_list)
-        assert np.all(b.mask == mask_list + mask_list)
+        with pytest.raises(ma.MaskError):
+            MaskedColumn(name='b', length=4, mask=mask_list)
 
 
 class TestTableInit(SetupData):

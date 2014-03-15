@@ -48,6 +48,9 @@ Explanation of keywords of the dictionaries:
     values for the fit (optional)
 """
 
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 from ..functional_models import (
     Gaussian1D, Sine1D, Box1D, Linear1D, Lorentz1D,
     MexicanHat1D, Trapezoid1D, Const1D, Beta1D,

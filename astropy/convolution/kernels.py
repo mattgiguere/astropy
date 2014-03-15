@@ -1,5 +1,6 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
-from __future__ import division
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
 import numpy as np
 
@@ -80,7 +81,8 @@ class Gaussian1DKernel(Kernel1D):
     _is_bool = False
 
     def __init__(self, width, **kwargs):
-        self._model = models.Gaussian1D(1. / (np.sqrt(2 * np.pi) * width), 0, width)
+        self._model = models.Gaussian1D(1. / (np.sqrt(2 * np.pi) * width),
+                                        0, width)
         self._default_size = _round_up_to_odd_integer(8 * width)
         super(Gaussian1DKernel, self).__init__(**kwargs)
         self._truncation = np.abs(1. - 1 / self._normalization)
@@ -145,7 +147,8 @@ class Gaussian2DKernel(Kernel2D):
     _is_bool = False
 
     def __init__(self, width, **kwargs):
-        self._model = models.Gaussian2D(1. / (2 * np.pi * width ** 2), 0, 0, width, width)
+        self._model = models.Gaussian2D(1. / (2 * np.pi * width ** 2), 0,
+                                        0, width, width)
         self._default_size = _round_up_to_odd_integer(8 * width)
         super(Gaussian2DKernel, self).__init__(**kwargs)
         self._truncation = np.abs(1. - 1 / self._normalization)
@@ -159,7 +162,7 @@ class Box1DKernel(Kernel1D):
     and can produce artifacts, when applied repeatedly to the same data.
 
     By default the Box kernel uses the `linear_interp` discretization mode,
-    which allows non shifting, even sized kernels.  This is achieved by
+    which allows non-shifting, even-sized kernels.  This is achieved by
     weighting the edge pixels with 1/2. E.g a Box kernel with an effective
     smoothing of 4 pixel would have the following array: [0.5, 1, 1, 1, 0.5].
 
@@ -227,7 +230,7 @@ class Box2DKernel(Kernel2D):
     and can produce artifact, when applied repeatedly to the same data.
 
     By default the Box kernel uses the `linear_interp` discretization mode,
-    which allows non shifting, even sized kernels.  This is achieved by
+    which allows non-shifting, even-sized kernels.  This is achieved by
     weighting the edge pixels with 1/2.
 
 
@@ -237,7 +240,7 @@ class Box2DKernel(Kernel2D):
         Width of the filter kernel.
     mode : str, optional
         One of the following discretization modes:
-            * 'center' 
+            * 'center'
                 Discretize model by taking the value
                 at the center of the bin.
             * 'linear_interp' (default)
@@ -293,8 +296,8 @@ class Tophat2DKernel(Kernel2D):
     """
     2D Tophat filter kernel.
 
-    The Tophat filter is an isotropic smoothing filter. It can produce artifact,
-    when applied repeatedly on the same data.
+    The Tophat filter is an isotropic smoothing filter. It can produce
+    artifacts when applied repeatedly on the same data.
 
     Parameters
     ----------
@@ -400,7 +403,7 @@ class Ring2DKernel(Kernel2D):
     def __init__(self, radius_in, width, **kwargs):
         radius_out = radius_in + width
         self._model = models.Ring2D(1. / (np.pi * (radius_out ** 2 - radius_in ** 2)),
-                                        0, 0, radius_in, width)
+                                    0, 0, radius_in, width)
         self._default_size = _round_up_to_odd_integer(2 * radius_out)
         super(Ring2DKernel, self).__init__(**kwargs)
         self._truncation = 0
@@ -529,8 +532,13 @@ class MexicanHat1DKernel(Kernel1D):
     The Mexican Hat, or inverted Gaussian-Laplace filter, is a
     bandpass filter. It smoothes the data and removes slowly varying
     or constant structures (e.g. Background). It is useful for peak or
-    multi-scale detection.  This kernel is derived from a normalized
-    Gaussian.
+    multi-scale detection.
+
+    This kernel is derived from a normalized Gaussian function, by
+    computing the second derivative. This results in an amplitude
+    at the kernels center of 1. / (sqrt(2 * pi) * width ** 3). The
+    normalization is the same as for `scipy.ndimage.filters.gaussian_laplace`,
+    except for a minus sign.
 
     Parameters
     ----------
@@ -584,7 +592,6 @@ class MexicanHat1DKernel(Kernel1D):
         self._default_size = _round_up_to_odd_integer(8 * width)
         super(MexicanHat1DKernel, self).__init__(**kwargs)
         self._truncation = np.abs(self._array.sum() / self._array.size)
-        self._normalization = 0
 
 
 class MexicanHat2DKernel(Kernel2D):
@@ -594,8 +601,13 @@ class MexicanHat2DKernel(Kernel2D):
     The Mexican Hat, or inverted Gaussian-Laplace filter, is a
     bandpass filter. It smoothes the data and removes slowly varying
     or constant structures (e.g. Background). It is useful for peak or
-    multi-scale detection.  This kernel is derived from a normalized
-    Gaussian.
+    multi-scale detection.
+
+    This kernel is derived from a normalized Gaussian function, by
+    computing the second derivative. This results in an amplitude
+    at the kernels center of 1. / (pi * width ** 4). The normalization
+    is the same as for `scipy.ndimage.filters.gaussian_laplace`, except
+    for a minus sign.
 
     Parameters
     ----------
@@ -652,7 +664,6 @@ class MexicanHat2DKernel(Kernel2D):
         self._default_size = _round_up_to_odd_integer(8 * width)
         super(MexicanHat2DKernel, self).__init__(**kwargs)
         self._truncation = np.abs(self._array.sum() / self._array.size)
-        self._normalization = 0
 
 
 class AiryDisk2DKernel(Kernel2D):
@@ -720,7 +731,7 @@ class AiryDisk2DKernel(Kernel2D):
 
 class Model1DKernel(Kernel1D):
     """
-    Create kernel from astropy.models.Parametric1DModel.
+    Create kernel from `astropy.modeling.Parametric1DModel`.
 
     The model has to be centered on x = 0.
 
@@ -750,11 +761,11 @@ class Model1DKernel(Kernel1D):
     Raises
     ------
     TypeError
-        If model is not an instance of astropy.models.Parametric1DModel
+        If model is not an instance of `astropy.modeling.Parametric1DModel`
 
     See also
     --------
-    Model2DKernel : Create kernel from astropy.models.Parametric2DModel
+    Model2DKernel : Create kernel from `astropy.modeling.Parametric2DModel`
     CustomKernel : Create kernel from list or array
 
     Examples
@@ -769,7 +780,7 @@ class Model1DKernel(Kernel1D):
 
         >>> gauss_kernel = Model1DKernel(gauss, x_size=9)
 
-    This kernel can now be used like a usual astropy kernel.
+    This kernel can now be used like a usual Astropy kernel.
     """
     _separable = False
     _is_bool = False
@@ -784,7 +795,7 @@ class Model1DKernel(Kernel1D):
 
 class Model2DKernel(Kernel2D):
     """
-    Create kernel from astropy.models.Parametric2DModel.
+    Create kernel from `astropy.modeling.Parametric1DModel`.
 
     The model has to be centered on x = 0 and y= 0.
 
@@ -847,6 +858,7 @@ class Model2DKernel(Kernel2D):
             self._model = model
         else:
             raise TypeError("Must be Parametric2DModel")
+        super(Model2DKernel, self).__init__(**kwargs)
 
 
 class PSFKernel(Kernel2D):
@@ -897,7 +909,6 @@ class CustomKernel(Kernel):
         >>> kernel.dimension
         2
     """
-
     def __init__(self, array):
         self.array = array
         super(CustomKernel, self).__init__(self._array)
@@ -915,15 +926,14 @@ class CustomKernel(Kernel):
         Filter kernel array setter
         """
         if isinstance(array, np.ndarray):
-            self._array = array
+            self._array = array.astype(np.float64)
         elif isinstance(array, list):
-            self._array = np.array(array)
+            self._array = np.array(array, dtype=np.float64)
         else:
             raise TypeError("Must be list or array.")
 
-        #Check if array is odd in all axis
+        # Check if array is odd in all axes
         odd = np.all([axes_size % 2 != 0 for axes_size in self.shape])
-
         if not odd:
             raise KernelSizeError("Kernel size must be odd in all axes.")
 
@@ -932,5 +942,4 @@ class CustomKernel(Kernel):
         zeros = self._array == 0
         self._is_bool = np.all(np.logical_or(ones, zeros))
 
-        # Set normalization
-        self._normalization = 1. / self._array.sum()
+        self._truncation = 0.0

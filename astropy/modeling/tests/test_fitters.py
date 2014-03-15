@@ -2,7 +2,10 @@
 """
 Module to test fitting routines
 """
-from __future__ import division
+
+from __future__ import (absolute_import, unicode_literals, division,
+                        print_function)
+
 import os.path
 from .. import models
 from .. import fitting
@@ -28,7 +31,7 @@ class TestPolynomial2D(object):
     """
     def setup_class(self):
         self.model = models.Polynomial2D(2)
-        self.x, self.y = np.mgrid[:5, :5]
+        self.y, self.x = np.mgrid[:5, :5]
 
         def poly2(x, y):
             return 1 + 2 * x + 3 * x ** 2 + 4 * y + 5 * y ** 2 + 6 * x * y
@@ -36,7 +39,7 @@ class TestPolynomial2D(object):
         self.fitter = fitting.LinearLSQFitter()
 
     def test_poly2D_fitting(self):
-        v = self.model.deriv(x=self.x, y=self.y)
+        v = self.model.fit_deriv(x=self.x, y=self.y)
         p = linalg.lstsq(v, self.z.flatten())[0]
         new_model = self.fitter(self.model, self.x, self.y, self.z)
         utils.assert_allclose(new_model.parameters, p)
@@ -64,7 +67,7 @@ class TestICheb2D(object):
     """
     def setup_class(self):
         self.pmodel = models.Polynomial2D(2)
-        self.x, self.y = np.mgrid[:5, :5]
+        self.y, self.x = np.mgrid[:5, :5]
         self.z = self.pmodel(self.x, self.y)
         self.cheb2 = models.Chebyshev2D(2, 2)
         self.fitter = fitting.LinearLSQFitter()

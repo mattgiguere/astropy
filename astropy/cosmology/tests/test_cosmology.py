@@ -1,6 +1,8 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
-from StringIO import StringIO
+from io import StringIO
 
 import numpy as np
 
@@ -95,40 +97,40 @@ def test_repr():
     """ Test string representation of built in classes"""
     cosmo = core.LambdaCDM(70, 0.3, 0.5)
     expected = 'LambdaCDM(H0=70 km / (Mpc s), Om0=0.3, Ode0=0.5, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
     cosmo = core.LambdaCDM(70, 0.3, 0.5, m_nu=u.Quantity(0.01, u.eV))
     expected = 'LambdaCDM(H0=70 km / (Mpc s), Om0=0.3, Ode0=0.5, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.01  0.01  0.01] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
     cosmo = core.FlatLambdaCDM(50.0, 0.27)
     expected = 'FlatLambdaCDM(H0=50 km / (Mpc s), Om0=0.27, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
     cosmo = core.wCDM(60.0, 0.27, 0.6, w0=-0.8, name='test1')
     expected = 'wCDM(name="test1", H0=60 km / (Mpc s), Om0=0.27, Ode0=0.6, w0=-0.8, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
     cosmo = core.FlatwCDM(65.0, 0.27, w0=-0.6, name='test2')
     expected = 'FlatwCDM(name="test2", H0=65 km / (Mpc s), Om0=0.27, w0=-0.6, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
     cosmo = core.w0waCDM(60.0, 0.25, 0.4, w0=-0.6, wa=0.1, name='test3')
     expected = 'w0waCDM(name="test3", H0=60 km / (Mpc s), Om0=0.25, Ode0=0.4, w0=-0.6, wa=0.1, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
     cosmo = core.Flatw0waCDM(55.0, 0.35, w0=-0.9, wa=-0.2, name='test4')
     expected = 'Flatw0waCDM(name="test4", H0=55 km / (Mpc s), Om0=0.35, w0=-0.9, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
     cosmo = core.wpwaCDM(50.0, 0.3, 0.3, wp=-0.9, wa=-0.2, zp=0.3, name='test5')
     expected = 'wpwaCDM(name="test5", H0=50 km / (Mpc s), Om0=0.3, Ode0=0.3, wp=-0.9, wa=-0.2, zp=0.3, Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.  0.  0.] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
     cosmo = core.w0wzCDM(55.0, 0.4, 0.8, w0=-1.05, wz=-0.2,
                          m_nu=u.Quantity([0.001, 0.01, 0.015], u.eV))
     expected = 'w0wzCDM(H0=55 km / (Mpc s), Om0=0.4, Ode0=0.8, w0=-1.05, wz=-0.2 Tcmb0=2.725 K, Neff=3.04, m_nu=[ 0.001  0.01   0.015] eV)'
-    assert "{0:s}".format(cosmo) == expected
+    assert str(cosmo) == expected
 
 @pytest.mark.skipif('not HAS_SCIPY')
 def test_flat_z1():
@@ -696,6 +698,17 @@ def test_distmod():
 
 
 @pytest.mark.skipif('not HAS_SCIPY')
+def test_neg_distmod():
+    # Cosmology with negative luminosity distances (perfectly okay,
+    #  if obscure)
+    tcos = core.LambdaCDM(70, 0.2, 1.3, Tcmb0=0)
+    assert np.allclose(tcos.luminosity_distance([50, 100]).value,
+                       [16612.44047622, -46890.79092244])
+    assert np.allclose(tcos.distmod([50, 100]).value, 
+                       [46.102167189, 48.355437790944])
+
+
+@pytest.mark.skipif('not HAS_SCIPY')
 def test_critical_density():
     # WMAP7 but with Omega_relativisitic = 0
     tcos = core.FlatLambdaCDM(70.4, 0.272, Tcmb0=0.0)
@@ -822,6 +835,62 @@ def test_massivenu_density():
     onu_exp = np.array([0.00584959, 0.01493142, 0.01772291,
                         0.01963451, 0.10227728])
     assert np.allclose(tcos.Onu(ztest), onu_exp, rtol=5e-3)
+
+
+@pytest.mark.skipif('not HAS_SCIPY')
+def test_z_at_value():
+    z_at_value = funcs.z_at_value
+    cosmo = core.Planck13
+    assert np.allclose(z_at_value(cosmo.age, 2 * u.Gyr), 3.1981191749374)
+    assert np.allclose(z_at_value(cosmo.luminosity_distance, 1e4 * u.Mpc),
+                       1.3685792789133948)
+    assert np.allclose(z_at_value(cosmo.lookback_time, 7 * u.Gyr),
+                       0.7951983674601507)
+    assert np.allclose(z_at_value(cosmo.angular_diameter_distance, 1500*u.Mpc,
+                                  zmax=2), 0.681277696252886)
+    assert np.allclose(z_at_value(cosmo.angular_diameter_distance, 1500*u.Mpc,
+                                  zmin=2.5), 3.7914918534022011)
+    assert np.allclose(z_at_value(cosmo.distmod, 46 * u.mag),
+                       1.9913870174451891)
+
+    # test behaviour when the solution is outside z limits (should
+    # raise a CosmologyError)
+    try:
+        z_at_value(cosmo.angular_diameter_distance, 1500*u.Mpc, zmax=0.5)
+    except core.CosmologyError:
+        pass
+    else:
+        raise RuntimeError('Test did not raise expected CosmologyError')
+    try:
+        z_at_value(cosmo.angular_diameter_distance, 1500*u.Mpc, zmin=4.)
+    except core.CosmologyError:
+        pass
+    else:
+        raise RuntimeError('Test did not raise expected CosmologyError')
+
+
+@pytest.mark.skipif('not HAS_SCIPY')
+def test_z_at_value_roundtrip():
+    """
+    Calculate values from a known redshift, and then check that
+    z_at_value returns the right answer.
+    """
+    z = 0.5
+
+    skip = ('z_at_value', 'angular_diameter_distance_z1z2', 'CosmologyError')
+
+    core.set_current('Planck13')
+    for name in dir(funcs):
+        if name.startswith('_') or name in skip:
+            continue
+        f = getattr(funcs, name)
+        if not hasattr(f, '__call__'):
+            continue
+        print('Round-trip testing {}'.format(name))
+        fval = f(z)
+        # we need zmax here to pick the right solution for
+        # angular_diameter_distance and related methods.
+        assert np.allclose(z, funcs.z_at_value(f, fval, zmax=1.5))
 
 
 def test_default_reset():

@@ -1,4 +1,9 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
+from ..extern import six
+
 import sys
 import warnings
 from math import sqrt, pi, exp, log, floor
@@ -40,7 +45,7 @@ arcmin_in_radians = 1 / 60. * pi / 180
 a_B_c2 = 4 * const.sigma_sb.cgs.value / const.c.cgs.value ** 3
 
 # Boltzmann constant in eV / K
-kB_evK = const.k_B.decompose().to(u.eV / u.K)
+kB_evK = const.k_B.to(u.eV / u.K)
 
 DEFAULT_COSMOLOGY = ConfigurationItem(
     'default_cosmology', 'no_default',
@@ -58,6 +63,7 @@ class Cosmology(object):
     pass
 
 
+@six.add_metaclass(ABCMeta)
 class FLRW(Cosmology):
     """ A class describing an isotropic and homogeneous
     (Friedmann-Lemaitre-Robertson-Walker) cosmology.
@@ -105,8 +111,6 @@ class FLRW(Cosmology):
     of the parameters.  That is, all of the attributes above are
     read only.
     """
-    __metaclass__ = ABCMeta
-
     def __init__(self, H0, Om0, Ode0, Tcmb0=2.725, Neff=3.04,
                  m_nu=u.Quantity(0.0, u.eV), name=None):
 
@@ -151,7 +155,7 @@ class FLRW(Cosmology):
                                    (8. * pi * const.G.cgs)).cgs
 
         # Load up neutrino masses.
-        self._nneutrinos = floor(self._Neff)
+        self._nneutrinos = int(floor(self._Neff))
         # We are going to share Neff between the neutrinos equally.
         # In detail this is not correct, but it is a standard assumption
         # because propertly calculating it is a) complicated b) depends
@@ -244,14 +248,14 @@ class FLRW(Cosmology):
     def _namelead(self):
         """ Helper function for constructing __repr__"""
         if self.name is None:
-            return "{0:s}(".format(self.__class__.__name__)
+            return "{0}(".format(self.__class__.__name__)
         else:
-            return "{0:s}(name=\"{1:s}\", ".format(self.__class__.__name__,
+            return "{0}(name=\"{1}\", ".format(self.__class__.__name__,
                                                    self.name)
 
     def __repr__(self):
-        retstr = "{0:s}H0={1:.3g}, Om0={2:.3g}, Ode0={3:.3g}, "\
-                 "Tcmb0={4:.4g}, Neff={5:.3g}, m_nu={6:s})"
+        retstr = "{0}H0={1:.3g}, Om0={2:.3g}, Ode0={3:.3g}, "\
+                 "Tcmb0={4:.4g}, Neff={5:.3g}, m_nu={6})"
         return retstr.format(self._namelead(), self._H0, self._Om0, self._Ode0,
                              self._Tcmb0, self._Neff, self.m_nu)
 
@@ -810,6 +814,10 @@ class FLRW(Cosmology):
         -------
         t : astropy.units.Quantity
           Lookback time in Gyr to each input redshift.
+
+        See Also
+        --------
+        z_at_value : Find the redshift corresponding to a lookback time.
         """
 
         from scipy.integrate import quad
@@ -831,6 +839,10 @@ class FLRW(Cosmology):
         -------
         t : astropy.units.Quantity
           The age of the universe in Gyr at each input redshift.
+
+        See Also
+        --------
+        z_at_value : Find the redshift corresponding to an age.
         """
 
         from scipy.integrate import quad
@@ -960,6 +972,10 @@ class FLRW(Cosmology):
         d : astropy.units.Quantity
           Luminosity distance in Mpc at each input redshift.
 
+        See Also
+        --------
+        z_at_value : Find the redshift corresponding to a luminosity distance.
+
         References
         ----------
         Weinberg, 1972, pp 420-424; Weedman, 1986, pp 60-62.
@@ -1080,10 +1096,17 @@ class FLRW(Cosmology):
         -------
         distmod : astropy.units.Quantity
           Distance modulus at each input redshift, in magnitudes
+
+        See Also
+        --------
+        z_at_value : Find the redshift corresponding to a distance modulus.
         """
 
         # Remember that the luminosity distance is in Mpc
-        val = 5. * np.log10(self.luminosity_distance(z).value * 1.e5)
+        # Abs is necessary because in certain obscure closed cosmologies 
+        #  the distance modulus can be negative -- which is okay because
+        #  it enters as the square.
+        val = 5. * np.log10(abs(self.luminosity_distance(z).value)) + 25.0
         return u.Quantity(val, u.mag)
 
     def comoving_volume(self, z):
@@ -1465,9 +1488,9 @@ class FlatLambdaCDM(LambdaCDM):
         return 1.0 / np.sqrt(zp1 ** 3 * (Or * zp1 + Om0) + Ode0)
 
     def __repr__(self):
-        retstr = "{0:s}H0={1:.3g}, Om0={2:.3g}, Tcmb0={3:.4g}, "\
-                 "Neff={4:.3g}, m_nu={5:s})"
-        return retstr.format(self._namelead(), self._H0, self._Om0, 
+        retstr = "{0}H0={1:.3g}, Om0={2:.3g}, Tcmb0={3:.4g}, "\
+                 "Neff={4:.3g}, m_nu={5})"
+        return retstr.format(self._namelead(), self._H0, self._Om0,
                              self._Tcmb0, self._Neff, self.m_nu)
 
 class wCDM(FLRW):
@@ -1643,10 +1666,10 @@ class wCDM(FLRW):
                              Ode0 * zp1 ** (3 * (1 + w0)))
 
     def __repr__(self):
-        retstr = "{0:s}H0={1:.3g}, Om0={2:.3g}, Ode0={3:.3g}, w0={4:.3g}, "\
-                 "Tcmb0={5:.4g}, Neff={6:.3g}, m_nu={7:s})"
-        return retstr.format(self._namelead(), self._H0, self._Om0, 
-                             self._Ode0, self._w0, self._Tcmb0, self._Neff, 
+        retstr = "{0}H0={1:.3g}, Om0={2:.3g}, Ode0={3:.3g}, w0={4:.3g}, "\
+                 "Tcmb0={5:.4g}, Neff={6:.3g}, m_nu={7})"
+        return retstr.format(self._namelead(), self._H0, self._Om0,
+                             self._Ode0, self._w0, self._Tcmb0, self._Neff,
                              self.m_nu)
 
 
@@ -1769,8 +1792,8 @@ class FlatwCDM(wCDM):
                              Ode0 * zp1 ** (3 * (1 + w0)))
 
     def __repr__(self):
-        retstr = "{0:s}H0={1:.3g}, Om0={2:.3g}, w0={3:.3g}, Tcmb0={4:.4g}, "\
-                 "Neff={5:.3g}, m_nu={6:s})"
+        retstr = "{0}H0={1:.3g}, Om0={2:.3g}, w0={3:.3g}, Tcmb0={4:.4g}, "\
+                 "Neff={5:.3g}, m_nu={6})"
         return retstr.format(self._namelead(), self._H0, self._Om0, self._w0,
                              self._Tcmb0, self._Neff, self.m_nu)
 
@@ -1906,9 +1929,9 @@ class w0waCDM(FLRW):
             np.exp(-3 * self._wa * z / zp1)
 
     def __repr__(self):
-        retstr = "{0:s}H0={1:.3g}, Om0={2:.3g}, "\
+        retstr = "{0}H0={1:.3g}, Om0={2:.3g}, "\
                  "Ode0={3:.3g}, w0={4:.3g}, wa={5:.3g}, Tcmb0={6:.4g}, "\
-                 "Neff={7:.3g}, m_nu={8:s})"
+                 "Neff={7:.3g}, m_nu={8})"
         return retstr.format(self._namelead(), self._H0, self._Om0,
                              self._Ode0, self._w0, self._wa,
                              self._Tcmb0, self._Neff, self.m_nu)
@@ -1978,8 +2001,8 @@ class Flatw0waCDM(w0waCDM):
         self._wa = float(wa)
 
     def __repr__(self):
-        retstr = "{0:s}H0={1:.3g}, Om0={2:.3g}, "\
-                 "w0={3:.3g}, Tcmb0={4:.4g}, Neff={5:.3g}, m_nu={6:s})"
+        retstr = "{0}H0={1:.3g}, Om0={2:.3g}, "\
+                 "w0={3:.3g}, Tcmb0={4:.4g}, Neff={5:.3g}, m_nu={6})"
         return retstr.format(self._namelead(), self._H0, self._Om0, self._w0,
                              self._Tcmb0, self._Neff, self.m_nu)
 
@@ -2134,9 +2157,9 @@ class wpwaCDM(FLRW):
             np.exp(-3 * self._wa * z / zp1)
 
     def __repr__(self):
-        retstr = "{0:s}H0={1:.3g}, Om0={2:.3g}, Ode0={3:.3g}, wp={4:.3g}, "\
+        retstr = "{0}H0={1:.3g}, Om0={2:.3g}, Ode0={3:.3g}, wp={4:.3g}, "\
                  "wa={5:.3g}, zp={6:.3g}, Tcmb0={7:.4g}, Neff={8:.3g}, "\
-                 "m_nu={9:s})"
+                 "m_nu={9})"
         return retstr.format(self._namelead(), self._H0, self._Om0,
                              self._Ode0, self._wp, self._wa, self._zp,
                              self._Tcmb0, self._Neff, self.m_nu)
@@ -2279,11 +2302,11 @@ class w0wzCDM(FLRW):
             np.exp(-3 * self._wz * z)
 
     def __repr__(self):
-        retstr = "{0:s}H0={1:.3g}, Om0={2:.3g}, "\
+        retstr = "{0}H0={1:.3g}, Om0={2:.3g}, "\
                  "Ode0={3:.3g}, w0={4:.3g}, wz={5:.3g} Tcmb0={6:.4g}, "\
-                 "Neff={7:.3g}, m_nu={8:s})"
-        return retstr.format(self._namelead(), self._H0, self._Om0, 
-                             self._Ode0, self._w0, self._wz, self._Tcmb0, 
+                 "Neff={7:.3g}, m_nu={8})"
+        return retstr.format(self._namelead(), self._H0, self._Om0,
+                             self._Ode0, self._w0, self._wz, self._Tcmb0,
                              self._Neff, self.m_nu)
 
 # Pre-defined cosmologies. This loops over the parameter sets in the
@@ -2384,7 +2407,7 @@ def set_current(cosmo):
     get_current : returns the currently-set cosmology
     """
     global _current
-    if isinstance(cosmo, basestring):
+    if isinstance(cosmo, six.string_types):
         _current = get_cosmology_from_string(cosmo)
     elif isinstance(cosmo, Cosmology):
         _current = cosmo

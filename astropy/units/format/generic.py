@@ -7,11 +7,15 @@ Handles a "generic" string format for units
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
+from ...extern import six
+
 import os
 import re
+import warnings
 
 from . import utils
 from .base import Base
+from ...utils.misc import did_you_mean
 
 
 class Generic(Base):
@@ -100,7 +104,7 @@ class Generic(Base):
             return t
 
         def t_UNIT(t):
-            r'%|[a-zA-Z][a-zA-Z_]*'
+            r'%|((?!\d)\w)+'
             t.value = cls._get_unit(t)
             return t
 
@@ -113,10 +117,12 @@ class Generic(Base):
 
         try:
             from . import generic_lextab
-            lexer = lex.lex(optimize=True, lextab=generic_lextab)
+            lexer = lex.lex(optimize=True, lextab=generic_lextab,
+                            reflags=re.UNICODE)
         except ImportError:
             lexer = lex.lex(optimize=True, lextab='generic_lextab',
-                            outputdir=os.path.dirname(__file__))
+                            outputdir=os.path.dirname(__file__),
+                            reflags=re.UNICODE)
 
         def p_main(p):
             '''
@@ -136,10 +142,14 @@ class Generic(Base):
 
         def p_division_product_of_units(p):
             '''
-            division_product_of_units : product_of_units division unit_expression
+            division_product_of_units : division_product_of_units division product_of_units
+                                      | product_of_units
             '''
             from ..core import Unit
-            p[0] = Unit(p[1] / p[3])
+            if len(p) == 4:
+                p[0] = Unit(p[1] / p[3])
+            else:
+                p[0] = p[1]
 
         def p_inverse_unit(p):
             '''
@@ -327,37 +337,53 @@ class Generic(Base):
     def _get_unit(cls, t):
         try:
             return cls._parse_unit(t.value)
-        except ValueError:
+        except ValueError as e:
             raise ValueError(
-                "At col {0}, {1!r} is not a valid unit".format(
-                    t.lexpos, t.value))
+                "At col {0}, {1}".format(
+                    t.lexpos, six.text_type(e)))
 
     @classmethod
-    def _parse_unit(cls, s):
+    def _parse_unit(cls, s, detailed_exception=True):
         from ..core import get_current_unit_registry
         registry = get_current_unit_registry().registry
         if s == '%':
             return registry['percent']
         elif s in registry:
             return registry[s]
-        raise ValueError(
-            '{0} is not a valid unit'.format(s))
+
+        if detailed_exception:
+            raise ValueError(
+                '{0} is not a valid unit. {1}'.format(
+                    s, did_you_mean(s, registry)))
+        else:
+            raise ValueError()
 
     def parse(self, s, debug=False):
+        if not isinstance(s, six.text_type):
+            s = s.decode('ascii')
+
+        result = self._do_parse(s, debug=debug)
+        if s.count('/') > 1:
+            from ..core import UnitsWarning
+            warnings.warn(
+                "'{0}' contains multiple slashes, which is "
+                "discouraged by the FITS standard".format(s),
+                UnitsWarning)
+        return result
+
+    def _do_parse(self, s, debug=False):
         # This is a short circuit for the case where the string
         # is just a single unit name
         try:
-            return self._parse_unit(s)
+            return self._parse_unit(s, detailed_exception=False)
         except ValueError as e:
             try:
                 return self._parser.parse(s, lexer=self._lexer, debug=debug)
             except ValueError as e:
-                if str(e):
-                    raise ValueError("{0} in string {1!r}".format(
-                        str(e), s))
+                if six.text_type(e):
+                    raise ValueError(six.text_type(e))
                 else:
-                    raise ValueError(
-                        "Syntax error parsing unit string {0!r}".format(s))
+                    raise ValueError("Syntax error")
 
     def _get_unit_name(self, unit):
         return unit.get_format_name('generic')

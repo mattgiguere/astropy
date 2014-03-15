@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+# TEST_UNICODE_LITERALS
 
 """
 Regression tests for the units package
@@ -11,11 +14,13 @@ from __future__ import (absolute_import, unicode_literals, division,
 import numpy as np
 from numpy.testing.utils import assert_allclose
 
+from ...extern import six
 from ...extern.six.moves import cPickle as pickle
 from ...tests.helper import pytest, raises, catch_warnings
 from ...utils.compat.fractions import Fraction
 
 from ... import units as u
+from ... import constants as c
 
 
 def test_getting_started():
@@ -46,16 +51,21 @@ def test_initialisation():
 
     assert u.Unit('m') == u.m
     assert u.Unit('') == u.dimensionless_unscaled
+    assert u.one == u.dimensionless_unscaled
     assert u.Unit('10 m') == ten_meter
     assert u.Unit(10.) == u.CompositeUnit(10., [], [])
 
 
 def test_invalid_power():
-    x = u.m ** (1, 3)
+    x = u.m ** Fraction(1, 3)
     assert isinstance(x.powers[0], Fraction)
 
-    x = u.m ** (1, 2)
+    x = u.m ** Fraction(1, 2)
     assert isinstance(x.powers[0], float)
+
+    # Test the automatic conversion to a fraction
+    x = u.m ** (1. / 3.)
+    assert isinstance(x.powers[0], Fraction)
 
 
 def test_invalid_compare():
@@ -139,11 +149,17 @@ def test_unknown_unit():
     assert 'FOO' in str(warning_lines[0].message)
 
 
-def test_unknown_unit2():
+def test_multiple_solidus():
+    assert u.Unit("m/s/kg").to_string() == u.m / u.s / u.kg
+
     with catch_warnings(u.UnitsWarning) as warning_lines:
-        assert u.Unit("m/s/kg", parse_strict='warn').to_string() == 'm/s/kg'
+        assert u.Unit("m/s/kg").to_string() == u.m / (u.s * u.kg)
 
     assert 'm/s/kg' in str(warning_lines[0].message)
+    assert 'discouraged' in str(warning_lines[0].message)
+
+    with pytest.raises(ValueError):
+        u.Unit("m/s/kg", format="vounit")
 
 
 def test_unknown_unit3():
@@ -254,7 +270,7 @@ def test_decompose_bases():
 
     d = e.esu.unit.decompose(bases=cgs.bases)
     assert d._bases == [u.cm, u.g, u.s]
-    assert d._powers == [Fraction(3, 2), Fraction(1, 2), -1]
+    assert d._powers == [Fraction(3, 2), 0.5, -1]
     assert d._scale == 1.0
 
 
@@ -271,7 +287,7 @@ def test_equiv_compose():
 
 
 def test_empty_compose():
-    with pytest.raises(u.UnitsException):
+    with pytest.raises(u.UnitsError):
         composed = u.m.compose(units=[])
 
 
@@ -443,11 +459,19 @@ def test_pickling():
     assert other is u.m
 
     new_unit = u.IrreducibleUnit(['foo'], format={'baz': 'bar'})
-    u.add_enabled_units([new_unit])
-    p = pickle.dumps(new_unit)
-    new_unit_copy = pickle.loads(p)
-    assert new_unit_copy.names == ['foo']
-    assert new_unit_copy.get_format_name('baz') == 'bar'
+    with u.add_enabled_units([new_unit]):
+        p = pickle.dumps(new_unit)
+        new_unit_copy = pickle.loads(p)
+        assert new_unit_copy.names == ['foo']
+        assert new_unit_copy.get_format_name('baz') == 'bar'
+
+
+def test_pickle_unrecognized_unit():
+    """
+    Issue #2047
+    """
+    a = u.Unit('asdf', parse_strict='silent')
+    pickle.loads(pickle.dumps(a))
 
 
 @raises(ValueError)
@@ -477,7 +501,7 @@ def test_comparison():
     assert u.cm < u.m
     assert u.cm <= u.m
 
-    with pytest.raises(u.UnitsException):
+    with pytest.raises(u.UnitsError):
         u.m > u.kg
 
 
@@ -529,3 +553,62 @@ def test_unicode_policy():
 
     assert_follows_unicode_guidelines(
         u.degree, roundtrip=u.__dict__)
+
+
+def test_suggestions():
+    for search, matches in [
+            ('microns', 'micron'),
+            ('s/microns', 'micron'),
+            ('M', 'm'),
+            ('metre', 'meter'),
+            ('angstroms', 'Angstrom or angstrom'),
+            ('milimeter', 'millimeter'),
+            ('ångström', 'Angstrom or angstrom'),
+            ('kev', 'EV, eV, kV or keV')]:
+        try:
+            u.Unit(search)
+        except ValueError as e:
+            assert 'Did you mean {0}?'.format(matches) in six.text_type(e)
+        else:
+            assert False, 'Expected ValueError'
+
+
+def test_fits_hst_unit():
+    """See #1911."""
+    x = u.Unit("erg /s /cm**2 /angstrom")
+    assert x == u.erg * u.s ** -1 * u.cm ** -2 * u.angstrom ** -1
+
+
+def test_fractional_powers():
+    """See #2069"""
+    m = 1e9 * u.Msun
+    tH = 1. / (70. * u.km / u.s / u.Mpc)
+    vc = 200 * u.km/u.s
+
+    x = (c.G ** 2 * m ** 2 * tH.cgs) ** Fraction(1, 3) / vc
+    v1 = x.to('pc')
+
+    x = (c.G ** 2 * m ** 2 * tH) ** Fraction(1, 3) / vc
+    v2 = x.to('pc')
+
+    x = (c.G ** 2 * m ** 2 * tH.cgs) ** (1.0 / 3.0) / vc
+    v3 = x.to('pc')
+
+    x = (c.G ** 2 * m ** 2 * tH) ** (1.0 / 3.0) / vc
+    v4 = x.to('pc')
+
+    assert_allclose(v1, v2)
+    assert_allclose(v2, v3)
+    assert_allclose(v3, v4)
+
+    x = u.m ** (1.0 / 11.0)
+    assert isinstance(x.powers[0], float)
+
+    x = u.m ** (3.0 / 7.0)
+    assert isinstance(x.powers[0], Fraction)
+    assert x.powers[0].numerator == 3
+    assert x.powers[0].denominator == 7
+
+
+def test_inherit_docstrings():
+    assert u.UnrecognizedUnit.is_unity.__doc__ == u.UnitBase.is_unity.__doc__

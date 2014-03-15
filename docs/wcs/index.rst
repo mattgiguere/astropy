@@ -30,7 +30,7 @@ The basic workflow is as follows:
 
     1. ``from astropy import wcs``
 
-    2. Call the `~astropy.wcs.wcs.WCS` constructor with an
+    2. Call the `~astropy.wcs.WCS` constructor with an
        `astropy.io.fits` header and/or hdulist object.
 
     3. Optionally, if the FITS file uses any deprecated or
@@ -90,7 +90,7 @@ saves those settings to a new FITS header.
 Validating the WCS keywords in a FITS file
 ------------------------------------------
 
-`astropy` includes a commandline tool, `wcslint` to check the WCS
+Astropy includes a commandline tool, ``wcslint`` to check the WCS
 keywords in a FITS file::
 
     > wcslint invalid.fits
@@ -118,7 +118,7 @@ As `astropy.wcs` is based on `wcslib`_, it supports the standard
 projections defined in the WCS papers.  These projection codes are
 specified in the second part of the ``CUNITn`` keywords (accessible
 through `Wcsprm.cunit <astropy.wcs.Wcsprm.cunit>`), for example,
-``RA-TAN-SIP``.  The supported projection codes are::
+``RA-TAN-SIP``.  The supported projection codes are:
 
 - ``AZP``: zenithal/azimuthal perspective
 - ``SZP``: slant zenithal perspective

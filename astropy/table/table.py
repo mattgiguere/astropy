@@ -430,6 +430,10 @@ class Table(object):
             # Somewhat confusingly in this case copy() refers to copying the
             # column attributes, but the data are used by reference.
             newcol = newcol.copy(data=self._data[col.name])
+
+            # Make column aware of the parent table
+            newcol.parent_table = self
+
             cols.append(newcol)
 
         self.columns = TableColumns(cols)
@@ -622,7 +626,7 @@ class Table(object):
         __str__ = __bytes__
 
     def pprint(self, max_lines=None, max_width=None, show_name=True,
-               show_unit=False):
+               show_unit=None):
         """Print a formatted string representation of the table.
 
         If no value of `max_lines` is supplied then the height of the screen
@@ -646,7 +650,9 @@ class Table(object):
             Include a header row for column names (default=True)
 
         show_unit : bool
-            Include a header row for unit (default=False)
+            Include a header row for unit.  Default is to show a row
+            for units only if one or more columns has a defined value
+            for the unit.
         """
 
         lines, n_header = _pformat_table(self, max_lines, max_width, show_name,
@@ -733,7 +739,7 @@ class Table(object):
         return tmp
 
     def pformat(self, max_lines=None, max_width=None, show_name=True,
-                show_unit=False, html=False, tableid=None):
+                show_unit=None, html=False, tableid=None):
         """Return a list of lines for the formatted string representation of
         the table.
 
@@ -758,7 +764,9 @@ class Table(object):
             Include a header row for column names (default=True)
 
         show_unit : bool
-            Include a header row for unit (default=False)
+            Include a header row for unit.  Default is to show a row
+            for units only if one or more columns has a defined value
+            for the unit.
 
         html : bool
             Format the output as an HTML table (default=False)
@@ -779,7 +787,7 @@ class Table(object):
         return lines
 
     def more(self, max_lines=None, max_width=None, show_name=True,
-             show_unit=False):
+             show_unit=None):
         """Interactively browse table with a paging interface.
 
         Supported keys::
@@ -806,7 +814,9 @@ class Table(object):
             Include a header row for column names (default=True)
 
         show_unit : bool
-            Include a header row for unit (default=False)
+            Include a header row for unit.  Default is to show a row
+            for units only if one or more columns has a defined value
+            for the unit.
         """
         _more_tabcol(self, max_lines, max_width, show_name,
                      show_unit)
@@ -898,7 +908,7 @@ class Table(object):
         else:
             raise StopIteration
 
-    if sys.version_info[0] < 3:  # pragma: py2
+    if six.PY2:
         next = __next__
 
     def field(self, item):
@@ -1761,19 +1771,19 @@ class Table(object):
     def __lt__(self, other):
         if six.PY3:
             return super(Table, self).__lt__(other)
-        else:
+        elif six.PY2:
             raise TypeError("unorderable types: Table() < {0}".format(str(type(other))))
 
     def __gt__(self, other):
         if six.PY3:
             return super(Table, self).__gt__(other)
-        else:
+        elif six.PY2:
             raise TypeError("unorderable types: Table() > {0}".format(str(type(other))))
 
     def __le__(self, other):
         if six.PY3:
             return super(Table, self).__le__(other)
-        else:
+        elif six.PY2:
             raise TypeError("unorderable types: Table() <= {0}".format(str(type(other))))
 
     def __ge__(self, other):

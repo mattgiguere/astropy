@@ -11,16 +11,14 @@ from ..extern import six
 from ..extern.six.moves import zip
 
 import inspect
-import numbers
 import sys
 import textwrap
 import warnings
 import numpy as np
 
-from ..utils.compat.fractions import Fraction
 from ..utils.exceptions import AstropyWarning
-from ..utils.misc import isiterable
-from .utils import is_effectively_unity
+from ..utils.misc import isiterable, InheritDocstrings
+from .utils import is_effectively_unity, validate_power
 from . import format as unit_format
 
 # TODO: Support functional units, e.g. log(x), ln(x)
@@ -31,7 +29,7 @@ __all__ = [
     'CompositeUnit', 'PrefixUnit', 'UnrecognizedUnit',
     'get_current_unit_registry', 'set_enabled_units',
     'add_enabled_units', 'set_enabled_equivalencies',
-    'add_enabled_equivalencies', 'dimensionless_unscaled']
+    'add_enabled_equivalencies', 'dimensionless_unscaled', 'one']
 
 
 def _flatten_units_collection(items):
@@ -448,6 +446,7 @@ class UnitsWarning(AstropyWarning):
     pass
 
 
+@six.add_metaclass(InheritDocstrings)
 class UnitBase(object):
     """
     Abstract base class for units.
@@ -481,13 +480,13 @@ class UnitBase(object):
     def __bytes__(self):
         """Return string representation for unit"""
         return unit_format.Generic().to_string(self).encode('ascii')
-    if sys.version_info[0] < 3:
+    if six.PY2:
         __str__ = __bytes__
 
     def __unicode__(self):
         """Return string representation for unit"""
         return unit_format.Generic().to_string(self)
-    if sys.version_info[0] >= 3:
+    if six.PY3:
         __str__ = __unicode__
 
     def __repr__(self):
@@ -554,7 +553,7 @@ class UnitBase(object):
         """
         Return the powers of the unit.
         """
-        return [1.0]
+        return [1]
 
     def to_string(self, format='generic'):
         """
@@ -602,25 +601,6 @@ class UnitBase(object):
             normalized += get_current_unit_registry().equivalencies
 
         return normalized
-
-    def _validate_power(self, p):
-        if isinstance(p, tuple) and len(p) == 2:
-            p = Fraction(p[0], p[1])
-
-        if isinstance(p, numbers.Rational):
-            # If the fractional power can be represented *exactly* as
-            # a floating point number, we convert it to a float, to
-            # make the math much faster, otherwise, we use a
-            # `fractions.Fraction` object to avoid losing precision.
-            denom = p.denominator
-            # This is bit-twiddling hack to see if the integer is a
-            # power of two
-            if (denom & (denom - 1)) == 0:
-                p = float(p)
-        else:
-            p = float(p)
-
-        return p
 
     def __pow__(self, p):
         return CompositeUnit(1, [self], [p])
@@ -675,7 +655,7 @@ class UnitBase(object):
         from .quantity import Quantity
         return m * Quantity(1, self)
 
-    if sys.version_info[0] >= 3:  # pragma: no cover
+    if six.PY3:
         def __hash__(self):
             # Since this class defines __eq__, it will become unhashable
             # on Python 3.x, so we need to define our own hash.
@@ -1543,7 +1523,7 @@ class NamedUnit(UnitBase):
             namespace[name] = self
 
 
-def _recreate_irreducible_unit(names, registered):
+def _recreate_irreducible_unit(cls, names, registered):
     """
     This is used to reconstruct units when passed around by
     multiprocessing.
@@ -1552,7 +1532,7 @@ def _recreate_irreducible_unit(names, registered):
     if names[0] in registry:
         return registry[names[0]]
     else:
-        unit = IrreducibleUnit(names)
+        unit = cls(names)
         if registered:
             get_current_unit_registry().add_enabled_units([unit])
 
@@ -1574,7 +1554,7 @@ class IrreducibleUnit(NamedUnit):
         # understands how to recreate the Unit on the other side.
         registry = get_current_unit_registry().registry
         return (_recreate_irreducible_unit,
-                (list(self.names), self.name in registry),
+                (self.__class__, list(self.names), self.name in registry),
                 self.__dict__)
 
     def decompose(self, bases=set()):
@@ -1596,7 +1576,6 @@ class IrreducibleUnit(NamedUnit):
                 "bases".format(self))
 
         return self
-    decompose.__doc__ = UnitBase.decompose.__doc__
 
 
 class UnrecognizedUnit(IrreducibleUnit):
@@ -1610,20 +1589,22 @@ class UnrecognizedUnit(IrreducibleUnit):
     st : str
         The name of the unit.
     """
-    def __init__(self, st):
-        IrreducibleUnit.__init__(self, st)
+    # For UnrecognizedUnits, we want to use "standard" Python
+    # pickling, not the special case that is used for
+    # IrreducibleUnits.
+    __reduce__ = object.__reduce__
 
     def __repr__(self):
         return "UnrecognizedUnit({0})".format(str(self))
 
     def __bytes__(self):
         return self.name.encode('ascii', 'replace')
-    if sys.version_info[0] < 3:
+    if six.PY2:
         __str__ = __bytes__
 
     def __unicode__(self):
         return self.name
-    if sys.version_info[0] >= 3:
+    if six.PY3:
         __str__ = __unicode__
 
     def to_string(self, format='generic'):
@@ -1662,7 +1643,7 @@ class UnrecognizedUnit(IrreducibleUnit):
         return False
 
 
-class _UnitMetaClass(type):
+class _UnitMetaClass(InheritDocstrings):
     """
     This metaclass exists because the Unit constructor should
     sometimes return instances that already exist.  This "overrides"
@@ -1718,8 +1699,9 @@ class _UnitMetaClass(type):
                 format = 'generic'
 
             f = unit_format.get_format(format)
-            if sys.version_info[0] >= 3 and isinstance(s, bytes):
-                s = s.decode('ascii')
+            if six.PY3:
+                if isinstance(s, bytes):
+                    s = s.decode('ascii')
 
             try:
                 return f.parse(s)
@@ -1727,8 +1709,12 @@ class _UnitMetaClass(type):
                 if parse_strict == 'silent':
                     pass
                 else:
-                    msg = ("'{0}' did not parse as unit format '{1}': {2}"
-                           .format(s, format, str(e)))
+                    if format != 'generic':
+                        format_clause = format + ' '
+                    else:
+                        format_clause = ''
+                    msg = ("'{0}' did not parse as {1}unit: {2}"
+                           .format(s, format_clause, six.text_type(e)))
                     if parse_strict == 'raise':
                         raise ValueError(msg)
                     elif parse_strict == 'warn':
@@ -1852,11 +1838,9 @@ class Unit(NamedUnit):
 
     def decompose(self, bases=set()):
         return self._represents.decompose(bases=bases)
-    decompose.__doc__ = UnitBase.decompose.__doc__
 
     def is_unity(self):
         return self._represents.is_unity()
-    is_unity.__doc__ = UnitBase.is_unity.__doc__
 
 
 class PrefixUnit(Unit):
@@ -1905,7 +1889,7 @@ class CompositeUnit(UnitBase):
             for base in bases:
                 if not isinstance(base, UnitBase):
                     raise TypeError("bases must be sequence of UnitBase instances")
-            powers = [self._validate_power(p) for p in powers]
+            powers = [validate_power(p, support_tuples=True) for p in powers]
 
         self._scale = scale
         self._bases = bases
@@ -1986,7 +1970,7 @@ class CompositeUnit(UnitBase):
         new_parts.sort(key=lambda x: (-x[1], getattr(x[0], 'name', '')))
 
         self._bases = [x[0] for x in new_parts]
-        self._powers = [x[1] for x in new_parts]
+        self._powers = [validate_power(x[1], support_tuples=True) for x in new_parts]
 
         if is_effectively_unity(scale):
             scale = 1.0
@@ -2017,7 +2001,6 @@ class CompositeUnit(UnitBase):
         if len(bases) == 0:
             self._decomposed_cache = x
         return x
-    decompose.__doc__ = UnitBase.decompose.__doc__
 
     def is_unity(self):
         unit = self.decompose()
@@ -2220,3 +2203,5 @@ def _condition_arg(value):
 
 
 dimensionless_unscaled = CompositeUnit(1, [], [], _error_check=False)
+# Abbreviation of the above, see #1980
+one = dimensionless_unscaled

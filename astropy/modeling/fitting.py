@@ -2,17 +2,18 @@
 
 """
 This module provides wrappers, called Fitters, around some Numpy and Scipy
-fitting functions. All Fitters take an instance of `~astropy.modeling.core.ParametricModel`
+fitting functions. All Fitters take an instance of `~astropy.modeling.ParametricModel`
 as input and define a ``__call__`` method which fits the model to the data and changes the
 model's parameters attribute. The idea is to make this extensible and allow
 users to easily add other fitters.
 
-Linear fitting is done using Numpy's `~numpy.linalg.lstsq` function.
-There are currently two non-linear fitters which use `~scipy.optimize.leastsq` and
-`~scipy.optimize.slsqp` functions in scipy.optimize.\
+Linear fitting is done using the `numpy.linalg.lstsq` function.
+There are currently two non-linear fitters which use `scipy.optimize.leastsq` and
+`scipy.optimize.slsqp` functions in `scipy.optimize`.
 """
 
-from __future__ import division
+from __future__ import (absolute_import, unicode_literals, division,
+                        print_function)
 
 import abc
 import numbers
@@ -25,7 +26,8 @@ import numpy as np
 from ..logger import log
 from .utils import poly_map_domain
 from ..utils.exceptions import AstropyUserWarning
-
+from .core import _CompositeModel
+from ..extern import six
 
 
 __all__ = ['LinearLSQFitter', 'NonLinearLSQFitter', 'SLSQPFitter',
@@ -70,14 +72,13 @@ class UnsupportedConstraintError(ModelsError, ValueError):
     """
 
 
+@six.add_metaclass(abc.ABCMeta)
 class Fitter(object):
     """
     Base class for all fitters.
 
     The purpose of this class is to manage constraints.
     """
-
-    __metaclass__ = abc.ABCMeta
 
     # The base Fitter does not support any constraints by default; individual
     # fitters should explicitly set this list to the specific constraints
@@ -162,7 +163,8 @@ class LinearLSQFitter(Fitter):
 
     Parameters
     ----------
-    model : an instance of `~astropy.modeling.core.ParametricModel`
+    model : `~astropy.modeling.ParametricModel`
+        Model
 
     Raises
     ------
@@ -183,11 +185,11 @@ class LinearLSQFitter(Fitter):
     @staticmethod
     def _deriv_with_constraints(model, param_indices, x=None, y=None):
         if y is None:
-            d = np.array(model.deriv(x, *model.parameters))
+            d = np.array(model.fit_deriv(x, *model.parameters))
         else:
-            d = np.array(model.deriv(x, y, *model.parameters))
+            d = np.array(model.fit_deriv(x, y, *model.parameters))
 
-        if model.col_deriv:
+        if model.col_fit_deriv:
             return d[param_indices]
         else:
             return d[:, param_indices]
@@ -274,7 +276,7 @@ class LinearLSQFitter(Fitter):
                                                    fitparam_indices,
                                                    x=x)
             else:
-                lhs = model_copy.deriv(x, *model_copy.parameters)
+                lhs = model_copy.fit_deriv(x, *model_copy.parameters)
             if len(y.shape) == 2:
                 rhs = y
                 multiple = y.shape[1]
@@ -293,14 +295,14 @@ class LinearLSQFitter(Fitter):
                 lhs = self._deriv_with_constraints(model_copy,
                                                    fitparam_indices, x=x, y=y)
             else:
-                lhs = model_copy.deriv(x, y, *model_copy.parameters)
+                lhs = model_copy.fit_deriv(x, y, *model_copy.parameters)
             if len(z.shape) == 3:
                 rhs = np.array([i.flatten() for i in z]).T
                 multiple = z.shape[0]
             else:
                 rhs = z.flatten()
         # If the derivative is defined along rows (as with non-linear models)
-        if model_copy.col_deriv:
+        if model_copy.col_fit_deriv:
             lhs = np.asarray(lhs).T
         if weights is not None:
             weights = np.asarray(weights, dtype=np.float)
@@ -351,7 +353,7 @@ class NonLinearLSQFitter(Fitter):
 
     Parameters
     ----------
-    model : a fittable `~astropy.modeling.core.ParametricModel`
+    model : a fittable `~astropy.modeling.ParametricModel`
         model to fit to data
 
     Raises
@@ -434,7 +436,7 @@ class NonLinearLSQFitter(Fitter):
             assumed that the relative errors in the functions are
             of the order of the machine precision.
         estimate_jacobian : bool
-            If False (default) and if the model has a deriv method,
+            If False (default) and if the model has a fit_deriv method,
             it will be used. Otherwise the Jacobian will be estimated.
             If True, the Jacobian will be estimated in any case.
 
@@ -443,6 +445,8 @@ class NonLinearLSQFitter(Fitter):
         model_copy : `ParametricModel`
             a copy of the input model with parameters set by the fitter
         """
+        if isinstance(model, _CompositeModel):
+            raise NotImplementedError("Fitting of composite models is not implemented in astropy v.0.3.")
         if not model.fittable:
             raise ValueError("Model must be a subclass of ParametricModel")
         self._validate_constraints(model)
@@ -454,14 +458,14 @@ class NonLinearLSQFitter(Fitter):
             # only single data sets ca be fitted
             raise ValueError("NonLinearLSQFitter can only fit one "
                              "data set at a time")
-        if model_copy.deriv is None or estimate_jacobian:
+        if model_copy.fit_deriv is None or estimate_jacobian:
             dfunc = None
         else:
             dfunc = self._wrap_deriv
         init_values, _ = model_copy._model_to_fit_params()
         fitparams, status, dinfo, mess, ierr = optimize.leastsq(
             self.errorfunc, init_values, args=farg, Dfun=dfunc,
-            col_deriv=model_copy.col_deriv, maxfev=maxiter, epsfcn=epsilon,
+            col_deriv=model_copy.col_fit_deriv, maxfev=maxiter, epsfcn=epsilon,
             full_output=True)
         self._fitter_to_model_params(model_copy, fitparams)
         self.fit_info.update(dinfo)
@@ -485,7 +489,7 @@ class NonLinearLSQFitter(Fitter):
         fitters using function derivative are added or when the statistic is
         separated from the fitting routines.
 
-        `~scipy.optimize.leastsq` expects the function derivative to have the
+        `scipy.optimize.leastsq` expects the function derivative to have the
         above signature (parlist, (argtuple)). In order to accomodate model
         constraints, instead of using p directly, we set the parameter list in
         this function.
@@ -493,9 +497,9 @@ class NonLinearLSQFitter(Fitter):
         if any(model.fixed.values()) or any(model.tied.values()):
 
             if z is None:
-                full_deriv = np.array(model.deriv(x, *model.parameters))
+                full_deriv = np.array(model.fit_deriv(x, *model.parameters))
             else:
-                full_deriv = np.array(model.deriv(x, y, *model.parameters))
+                full_deriv = np.array(model.fit_deriv(x, y, *model.parameters))
 
             pars = [getattr(model, name) for name in model.param_names]
             fixed = [par.fixed for par in pars]
@@ -504,7 +508,7 @@ class NonLinearLSQFitter(Fitter):
             fix_and_tie = np.logical_or(fixed, tied)
             ind = np.logical_not(fix_and_tie)
 
-            if not model.col_deriv:
+            if not model.col_fit_deriv:
                 full_deriv = np.asarray(full_deriv).T
                 residues = np.asarray(full_deriv[np.nonzero(ind)])
             else:
@@ -513,9 +517,9 @@ class NonLinearLSQFitter(Fitter):
             return [np.ravel(_) for _ in residues]
         else:
             if z is None:
-                return model.deriv(x, *params)
+                return model.fit_deriv(x, *params)
             else:
-                return [np.ravel(_) for _ in model.deriv(x, y, *params)]
+                return [np.ravel(_) for _ in model.fit_deriv(x, y, *params)]
 
 
 class SLSQPFitter(Fitter):
@@ -599,6 +603,8 @@ class SLSQPFitter(Fitter):
         model_copy : `ParametricModel`
             a copy of the input model with parameters set by the fitter
         """
+        if isinstance(model, _CompositeModel):
+            raise NotImplementedError("Fitting of composite models is not implemented in astropy v.0.3.")
         if not model.fittable:
             raise ValueError("Model must be a subclass of ParametricModel")
         if model.linear:

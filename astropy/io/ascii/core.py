@@ -7,28 +7,8 @@ core.py:
 :Copyright: Smithsonian Astrophysical Observatory (2010)
 :Author: Tom Aldcroft (aldcroft@head.cfa.harvard.edu)
 """
-##
-## Redistribution and use in source and binary forms, with or without
-## modification, are permitted provided that the following conditions are met:
-##     * Redistributions of source code must retain the above copyright
-##       notice, this list of conditions and the following disclaimer.
-##     * Redistributions in binary form must reproduce the above copyright
-##       notice, this list of conditions and the following disclaimer in the
-##       documentation and/or other materials provided with the distribution.
-##     * Neither the name of the Smithsonian Astrophysical Observatory nor the
-##       names of its contributors may be used to endorse or promote products
-##       derived from this software without specific prior written permission.
-##
-## THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
-## ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
-## WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-## DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
-## DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
-## (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
-## LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
-## ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
-## (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
-## SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+from __future__ import absolute_import, division, print_function
 
 import os
 import re
@@ -36,6 +16,10 @@ import csv
 import itertools
 import functools
 import numpy
+
+from ...extern import six
+from ...extern.six.moves import zip
+from ...extern.six.moves import cStringIO as StringIO
 
 from ...table import Table
 from ...utils.data import get_readable_fileobj
@@ -47,56 +31,60 @@ FORMAT_CLASSES = {}
 
 
 class InconsistentTableError(ValueError):
+    """
+    Indicates that an input table is inconsistent in some way.
+    
+    The default behavior of ``BaseReader`` is to throw an instance of
+    this class if a data row doesn't match the header.
+    """
     pass
-
-# Python 3 compatibility tweaks.  Should work back through 2.4.
-try:
-    from cStringIO import StringIO
-except ImportError:
-    from io import StringIO
-
-try:
-    next = next
-except NameError:
-    next = lambda x: x.next()
-
-try:
-    izip = itertools.izip
-except AttributeError:
-    izip = zip
-
-try:
-    long = long
-except NameError:
-    long = int
-
-try:
-    unicode = unicode
-except NameError:
-    unicode = str
 
 
 class NoType(object):
+    """
+    Superclass for ``StrType`` and ``NumType`` classes.
+
+    This class is the default type of ``Column`` and provides a base
+    class for other data types.
+    """
     pass
 
 
 class StrType(NoType):
+    """
+    Indicates that a column consists of text data.
+    """
     pass
 
 
 class NumType(NoType):
+    """
+    Indicates that a column consists of numerical data.
+    """
     pass
 
 
 class FloatType(NumType):
+    """
+    Describes floating-point data.
+    """
     pass
 
 
 class IntType(NumType):
+    """
+    Describes integer data.
+    """
     pass
 
 
 class AllType(StrType, FloatType, IntType):
+    """
+    Subclass of all other data types.
+
+    This type is returned by ``convert_numpy`` if the given numpy
+    type does not match ``StrType``, ``FloatType``, or ``IntType``.
+    """
     pass
 
 
@@ -261,16 +249,20 @@ class DefaultSplitter(BaseSplitter):
         if self.process_line:
             lines = [self.process_line(x) for x in lines]
 
-        if self.delimiter == '\s':
+        # In Python 2.x the inputs to csv cannot be unicode.  In Python 3 these
+        # lines do nothing.
+        escapechar = None if self.escapechar is None else str(self.escapechar)
+        quotechar = None if self.quotechar is None else str(self.quotechar)
+        delimiter = None if self.delimiter is None else str(self.delimiter)
+
+        if delimiter == '\s':
             delimiter = ' '
-        else:
-            delimiter = self.delimiter
 
         csv_reader = csv.reader(lines,
                                 delimiter=delimiter,
                                 doublequote=self.doublequote,
-                                escapechar=self.escapechar,
-                                quotechar=self.quotechar,
+                                escapechar=escapechar,
+                                quotechar=quotechar,
                                 quoting=self.quoting,
                                 skipinitialspace=self.skipinitialspace
                                 )
@@ -281,17 +273,18 @@ class DefaultSplitter(BaseSplitter):
                 yield vals
 
     def join(self, vals):
-        if self.delimiter is None:
-            delimiter = ' '
-        else:
-            delimiter = self.delimiter
+
+        # In Python 2.x the inputs to csv cannot be unicode
+        escapechar = None if self.escapechar is None else str(self.escapechar)
+        quotechar = None if self.quotechar is None else str(self.quotechar)
+        delimiter = ' ' if self.delimiter is None else str(self.delimiter)
 
         if self.csv_writer is None:
             self.csv_writer = csv.writer(self.csv_writer_out,
                                          delimiter=delimiter,
                                          doublequote=self.doublequote,
-                                         escapechar=self.escapechar,
-                                         quotechar=self.quotechar,
+                                         escapechar=escapechar,
+                                         quotechar=quotechar,
                                          quoting=self.quoting,
                                          lineterminator='',
                                          )
@@ -410,8 +403,8 @@ class BaseHeader(object):
 
     def write(self, lines):
         if self.start_line is not None:
-            for i, spacer_line in izip(range(self.start_line),
-                                       itertools.cycle(self.write_spacer_lines)):
+            for i, spacer_line in zip(range(self.start_line),
+                                      itertools.cycle(self.write_spacer_lines)):
                 lines.append(spacer_line)
             lines.append(self.splitter.join([x.name for x in self.cols]))
 
@@ -739,11 +732,19 @@ def _apply_include_exclude_names(table, names, include_names, exclude_names, str
                                  .format(name))
 
     if names is not None:
+        # Rename table column names to those passed by user
         if len(names) != len(table.colnames):
             raise ValueError('Length of names argument ({0}) does not match number'
                              ' of table columns ({1})'.format(len(names), len(table.colnames)))
-        for name, colname in zip(names, table.colnames):
-            table.rename_column(colname, name)
+
+        # Temporarily rename with names that are not in `names` or `table.colnames`.
+        # This ensures that rename succeeds regardless of existing names.
+        xxxs = 'x' * max(len(name) for name in list(names) + list(table.colnames))
+        for ii, colname in enumerate(table.colnames):
+            table.rename_column(colname, xxxs + str(ii))
+
+        for ii, name in enumerate(names):
+            table.rename_column(xxxs + str(ii), name)
 
     names = set(table.colnames)
     if include_names is not None:
@@ -755,6 +756,7 @@ def _apply_include_exclude_names(table, names, include_names, exclude_names, str
         table.remove_columns(remove_names)
 
 
+@six.add_metaclass(MetaBaseReader)
 class BaseReader(object):
     """Class providing methods to read and write an ASCII table using the specified
     header, data, inputter, and outputter instances.
@@ -768,7 +770,6 @@ class BaseReader(object):
     The default behavior is to raise an InconsistentTableError.
 
     """
-    __metaclass__ = MetaBaseReader
 
     names = None
     include_names = None
@@ -908,8 +909,8 @@ class BaseReader(object):
                                      self.strict_names)
 
         # link information about the columns to the writer object (i.e. self)
-        self.header.cols = table.columns.values()
-        self.data.cols = table.columns.values()
+        self.header.cols = list(six.itervalues(table.columns))
+        self.data.cols = list(six.itervalues(table.columns))
 
         # Write header and data to lines list
         lines = []
@@ -1025,7 +1026,8 @@ def _get_reader(Reader, Inputter=None, Outputter=None, **kwargs):
             if (('data_start' not in kwargs) and (default_header_length is not None)
                     and reader._format_name != 'fixed_width_two_line'):
                 reader.data.start_line = reader.header.start_line + default_header_length
-        else:
+        elif kwargs['header_start'] is not None:
+            # User trying to set a None header start to some value other than None
             raise ValueError('header_start cannot be modified for this Reader')
     if 'converters' in kwargs:
         reader.outputter.converters = kwargs['converters']

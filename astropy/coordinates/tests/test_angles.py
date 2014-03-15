@@ -1,4 +1,7 @@
+# -*- coding: utf-8 -*-
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+# TEST_UNICODE_LITERALS
 
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
@@ -19,7 +22,7 @@ def test_negative_zero_dms():
     assert_allclose(a.degree, -10. / 3600.)
 
     # Unicode minus
-    a = Angle('\u221200:00:10', u.deg)
+    a = Angle('−00:00:10', u.deg)
     assert_allclose(a.degree, -10. / 3600.)
 
 
@@ -246,6 +249,16 @@ def test_longitude():
     lon.wrap_angle = '90d'
     assert lon == Angle('-260d')
 
+    #check for problem reported in #2037 about Longitude initializing to -0
+    lon = Longitude(0, u.deg)
+    lonstr = lon.to_string()
+    assert not lonstr.startswith('-')
+
+    #also make sure dtype is correctly conserved
+    assert Longitude(0, u.deg, dtype=float).dtype == np.dtype(float)
+    assert Longitude(0, u.deg, dtype=int).dtype == np.dtype(int)
+
+
 
 def test_wrap_at():
     a = Angle([-20, 150, 350, 360] * u.deg)
@@ -296,3 +309,8 @@ def test_regression_formatting_negative():
     assert Angle(-1., unit='deg').to_string() == '-1d00m00s'
     assert Angle(-0., unit='hour').to_string() == '-0h00m00s'
     assert Angle(-1., unit='hour').to_string() == '-1h00m00s'
+
+def test_empty_sep():
+    a = Angle('05h04m31.93830s')
+
+    assert a.to_string(sep='', precision=2, pad=True) == '050431.94'

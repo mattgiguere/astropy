@@ -1,5 +1,10 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+# TEST_UNICODE_LITERALS
+
 from __future__ import absolute_import, division, print_function, unicode_literals
+
+from ...extern import six
 
 import os
 import sys
@@ -13,9 +18,8 @@ from ...tests.helper import raises, catch_warnings, pytest
 from ... import wcs
 from ...utils.data import (
     get_pkg_data_filenames, get_pkg_data_contents, get_pkg_data_filename)
-from ...tests.helper import pytest
 from ...utils.misc import NumpyRNGContext
-
+from ...utils.exceptions import AstropyDeprecationWarning
 
 try:
     import scipy  # pylint: disable=W0611
@@ -122,7 +126,10 @@ def test_spectra():
 
 
 def test_units():
-    u = wcs.UnitConverter("log(MHz)", "ln(Hz)")
+    with catch_warnings(AstropyDeprecationWarning) as w:
+        u = wcs.UnitConverter("log(MHz)", "ln(Hz)")
+    assert len(w) == 1
+
     print(u.convert([1, 2, 3, 4]))
 
 basic_units = "m s g rad sr K A mol cd".split()
@@ -223,7 +230,12 @@ def test_fixes():
     def run():
         header = get_pkg_data_contents(
             'data/nonstandard_units.hdr', encoding='binary')
-        w = wcs.WCS(header)
+        try:
+            w = wcs.WCS(header, translate_units='dhs')
+        except wcs.InvalidTransformError:
+            pass
+        else:
+            assert False, "Expected InvalidTransformError"
 
     with catch_warnings(wcs.FITSFixedWarning) as w:
         run()
@@ -247,6 +259,40 @@ def test_outside_sky():
     assert np.all(np.isnan(w.wcs_pix2world([[100., 500.]], 0)))  # outside sky
     assert np.all(np.isnan(w.wcs_pix2world([[200., 200.]], 0)))  # outside sky
     assert not np.any(np.isnan(w.wcs_pix2world([[1000., 1000.]], 0)))
+
+
+def test_pix2world():
+    """
+    From github issue #1463
+    """
+    # TODO: write this to test the expected output behavior of pix2world,
+    # currently this just makes sure it doesn't error out in unexpected ways
+    filename = get_pkg_data_filename('data/sip2.fits')
+    with catch_warnings(wcs.wcs.FITSFixedWarning) as caught_warnings:
+        # this raises a warning unimportant for this testing the pix2world
+        #   FITSFixedWarning(u'The WCS transformation has more axes (2) than the
+        #        image it is associated with (0)')
+        ww = wcs.WCS(filename)
+
+        # might as well monitor for changing behavior
+        assert len(caught_warnings) == 1
+
+    n = 3
+    pixels = (np.arange(n)*np.ones((2, n))).T
+    result = ww.wcs_pix2world(pixels, 0, ra_dec_order=True)
+
+    close_enough = 1e-8
+    # assuming that the data of sip2.fits doesn't change
+    answer = np.array([[0.00024976, 0.00023018],
+                       [0.00023043, -0.00024997]])
+
+    assert np.all(np.abs(ww.wcs.pc-answer) < close_enough)
+
+    answer = np.array([[ 202.39265216,   47.17756518],
+                       [ 202.39335826,   47.17754619],
+                       [ 202.39406436,   47.1775272 ]])
+
+    assert  np.all(np.abs(result-answer) < close_enough)
 
 
 def test_load_fits_path():
@@ -442,11 +488,19 @@ def test_find_all_wcs_crash():
 
 
 def test_validate():
-    results = wcs.validate(get_pkg_data_filename("data/validate.fits"))
-    results_txt = repr(results)
-    with open(get_pkg_data_filename("data/validate.txt"), "r") as fd:
-        assert set([x.strip() for x in fd.readlines()]) == set([
-            x.strip() for x in results_txt.splitlines()])
+    with catch_warnings():
+        results = wcs.validate(get_pkg_data_filename("data/validate.fits"))
+        results_txt = repr(results)
+        with open(get_pkg_data_filename("data/validate.txt"), "r") as fd:
+            assert set([x.strip() for x in fd.readlines()]) == set([
+                x.strip() for x in results_txt.splitlines()])
+
+
+def test_validate_with_2_wcses():
+    # From Issue #2053
+    results = wcs.validate(get_pkg_data_filename("data/2wcses.hdr"))
+
+    assert "WCS key 'A':" in six.text_type(results)
 
 
 @pytest.mark.skipif(str('not HAS_SCIPY'))
@@ -482,13 +536,61 @@ def test_scamp_sip_distortion_parameters():
     w.all_pix2world(0, 0, 0)
 
 
-def test_fixes():
+def test_fixes2():
     """
     From github issue #1854
     """
     header = get_pkg_data_contents(
         'data/nonstandard_units.hdr', encoding='binary')
-    w = wcs.WCS(header, fix=False)
+    with pytest.raises(wcs.InvalidTransformError):
+        w = wcs.WCS(header, fix=False)
+
+
+def test_unit_normalization():
+    """
+    From github issue #1918
+    """
+    header = get_pkg_data_contents(
+        'data/unit.hdr', encoding='binary')
+    w = wcs.WCS(header)
+    assert w.wcs.cunit[2] == 'm/s'
+
+
+def test_footprint_to_file(tmpdir):
+    """
+    From github issue #1912
+    """
+    # Arbitrary keywords from real data
+    w = wcs.WCS({'CTYPE1': 'RA---ZPN', 'CRUNIT1': 'deg',
+                 'CRPIX1': -3.3495999e+02, 'CRVAL1': 3.185790700000e+02,
+                 'CTYPE2': 'DEC--ZPN', 'CRUNIT2': 'deg',
+                 'CRPIX2': 3.0453999e+03, 'CRVAL2': 4.388538000000e+01,
+                 'PV2_1': 1., 'PV2_3': 220.})
+    # Just check that this doesn't raise an exception:
+    w.footprint_to_file(str(tmpdir.join('test.txt')))
+
+
+def test_validate_faulty_wcs():
+    """
+    From github issue #2053
+    """
+    from ...io import fits
+    h = fits.Header()
+    # Illegal WCS:
+    h['RADESYSA'] = 'ICRS'
+    h['PV2_1'] = 1.0
+    hdu = fits.PrimaryHDU([[0]], header=h)
+    hdulist = fits.HDUList([hdu])
+    # Check that this doesn't raise a NameError exception:
+    wcs.validate(hdulist)
+
+
+def test_error_message():
+    header = get_pkg_data_contents(
+        'data/invalid_header.hdr', encoding='binary')
 
     with pytest.raises(wcs.InvalidTransformError):
-        w.to_header()
+        # Both lines are in here, because 0.4 calls .set within WCS.__init__,
+        # whereas 0.3 and earlier did not.
+        w = wcs.WCS(header, _do_set=False)
+        c = w.all_pix2world([[536.0, 894.0]], 0)

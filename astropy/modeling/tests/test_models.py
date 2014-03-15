@@ -5,9 +5,9 @@ Tests for model evaluation.
 Compare the results of some models with other programs.
 """
 
-from __future__ import division
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
 
-import copy_reg
 import types
 
 try:
@@ -27,6 +27,9 @@ from ..core import (LabeledInput, SerialCompositeModel, SummedCompositeModel,
 from ..polynomial import PolynomialModel
 from ...tests.helper import pytest
 
+from ...extern import six
+from ...extern.six.moves import copyreg as copy_reg
+
 try:
     from scipy import optimize  # pylint: disable=W0611
     HAS_SCIPY = True
@@ -39,7 +42,7 @@ class TestSerialComposite(object):
     Test composite models evaluation in series
     """
     def setup_class(self):
-        self.x, self.y = np.mgrid[:5, :5]
+        self.y, self.x = np.mgrid[:5, :5]
         self.p1 = models.Polynomial1D(3)
         self.p11 = models.Polynomial1D(3)
         self.p2 = models.Polynomial2D(3)
@@ -173,13 +176,13 @@ def test_custom_model(amplitude=4, frequency=1):
         df = 2 * np.pi * x * amplitude * np.cos(2 * np.pi * frequency * x)
         return np.vstack((da, df))
 
-    SineModel = models.custom_model_1d(sine_model, func_deriv=sine_deriv)
+    SineModel = models.custom_model_1d(sine_model, func_fit_deriv=sine_deriv)
 
     x = np.linspace(0, 4, 50)
     sin_model = SineModel()
 
     y = sin_model.eval(x, 5., 2.)
-    y_prime = sin_model.deriv(x, 5., 2.)
+    y_prime = sin_model.fit_deriv(x, 5., 2.)
 
     np.random.seed(0)
     data = sin_model(x) + np.random.rand(len(x)) - 0.5
@@ -237,7 +240,7 @@ class TestParametricModels(object):
         self.y = 6.7
         self.x1 = np.arange(1, 10, .1)
         self.y1 = np.arange(1, 10, .1)
-        self.x2, self.y2 = np.mgrid[:10, :8]
+        self.y2, self.x2 = np.mgrid[:10, :8]
 
     @pytest.mark.parametrize(('model_class'), models_1D.keys())
     def test_input1D(self, model_class):
@@ -331,7 +334,7 @@ class TestParametricModels(object):
         model = create_model(model_class, parameters)
         if isinstance(parameters, dict):
             parameters.pop('degree')
-            parameters = parameters.values()
+            parameters = list(six.itervalues(parameters))
 
         if "log_fit" in models_2D[model_class]:
             if models_2D[model_class]['log_fit']:
@@ -360,7 +363,7 @@ class TestParametricModels(object):
         x_lim = models_2D[model_class]['x_lim']
         y_lim = models_2D[model_class]['y_lim']
 
-        if model_class.deriv is None:
+        if model_class.fit_deriv is None:
             pytest.skip("Derivative function is not defined for model.")
         if issubclass(model_class, (models.PolynomialModel, models.OrthoPolynomialBase)):
             pytest.skip("Skip testing derivative of polynomials.")
@@ -403,7 +406,7 @@ class TestParametricModels(object):
         """
         x_lim = models_1D[model_class]['x_lim']
 
-        if model_class.deriv is None:
+        if model_class.fit_deriv is None:
             pytest.skip("Derivative function is not defined for model.")
         if issubclass(model_class, (models.PolynomialModel, models.OrthoPolynomialBase)):
             pytest.skip("Skip testing derivative of polynomials.")
@@ -476,3 +479,14 @@ def test_ScaleModel():
     m = models.Scale([42, 43])
     utils.assert_equal(m(0), [0, 0])
     utils.assert_equal(m([1, 2]), [[ 42,  43], [ 84,  86]])
+
+
+def test_parametric_model_repr():
+    """Some unit tests that cover lines in core.py that are untested at the
+    moment"""
+
+    m = models.Gaussian1D(1, 2, 3)
+    assert (repr(m) ==
+            "<Gaussian1D(amplitude=Parameter('amplitude', value=1.0), "
+            "mean=Parameter('mean', value=2.0), stddev=Parameter('stddev', "
+            "value=3.0), param_dim=1)>")

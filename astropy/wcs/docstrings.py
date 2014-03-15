@@ -161,6 +161,27 @@ b_order = """
 ``int`` (read-only) Order of the polynomial (``B_ORDER``).
 """
 
+bounds_check = """
+bounds_check(pix2world, world2pix)
+
+Parameters
+----------
+pix2world : bool, optional
+    When `True`, enable bounds checking for the pixel-to-world (p2x)
+    transformation for the ``HPX`` and ``XPH`` projections.  Default
+    is `False`.
+
+world2pix : bool, optional
+    When `True`, enable bounds checking for the world-to-pixel (s2x)
+    transformation for the ``AZP``, ``SZP``, ``TAN``, ``SIN``, ``ZPN``
+    and ``COP`` projections.  Default is `False`.
+
+Notes
+-----
+Note that by default (without calling `bounds_check`) strict bounds
+checking is enabled.
+"""
+
 bp = """
 ``double array[bp_order+1][bp_order+1]`` Focal plane to pixel
 transformation matrix.
@@ -1378,7 +1399,7 @@ To get a string of the contents, use `repr`.
 print_contents_tabprm = """
 print_contents()
 
-Print the contents of the `~astropy.wcs._astropy.wcs.Tabprm` object to
+Print the contents of the `~astropy.wcs.Tabprm` object to
 stdout.  Probably only useful for debugging purposes, and may be
 removed in the future.
 
@@ -1959,7 +1980,7 @@ number of respects:
 
 Keywords can be translated between the image array, binary table, and
 pixel lists forms by manipulating the `~astropy.wcs.Wcsprm.colnum` or
-`~astropy.wcs.Wcsprm.colax` members of the `~astropy.wcs.Wcsprm.WCS`
+`~astropy.wcs.Wcsprm.colax` members of the `~astropy.wcs.WCS`
 object.
 
 Parameters
@@ -2180,6 +2201,14 @@ Wcsprm(header=None, key=' ', relax=False, naxis=2, keysel=0, colsel=None)
 
 `~astropy.wcs.Wcsprm` is a direct wrapper around `wcslib`_.  It
 provides access to the core WCS transformations that it supports.
+
+.. note::
+    The members of this object correspond roughly to the key/value
+    pairs in the FITS header.  However, they are adjusted and
+    normalized in a number of ways that make performing the WCS
+    transformation easier.  Therefore, they can not be relied upon to
+    get the original values in the header.  For that, use
+    `astropy.io.fits.Header` directly.
 
 The FITS header parsing enforces correct FITS "keyword = value" syntax
 with regard to the equals sign occurring in columns 9 and 10.

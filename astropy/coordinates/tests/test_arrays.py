@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+# TEST_UNICODE_LITERALS
+
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -278,3 +281,36 @@ def test_array_indexing():
     assert c2.equinox == c1.equinox
     assert c3.equinox == c1.equinox
     assert c4.equinox == c1.equinox
+
+def test_array_len():
+    from .. import ICRS
+
+    input_length = [1, 5]
+    for length in input_length:
+        ra = np.linspace(0, 360, length)
+        dec = np.linspace(0, 90, length)
+
+        c = ICRS(ra, dec, unit=(u.degree, u.degree))
+
+        assert len(c) == length
+
+        assert c.shape == (length,)
+
+    with pytest.raises(TypeError):
+        c = ICRS(0, 0, unit=(u.degree, u.degree))
+        len(c)
+
+    assert c.shape == tuple()
+
+def test_array_eq():
+    from .. import ICRS
+
+    c1 = ICRS([1, 2], [3, 4], unit=('deg', 'deg'))
+    c2 = ICRS([1, 2], [3, 5], unit=('deg', 'deg'))
+    c3 = ICRS([1, 3], [3, 4], unit=('deg', 'deg'))
+    c4 = ICRS([1, 2], [3, 4.2], unit=('deg', 'deg'))
+
+    assert c1 == c1
+    assert c1 != c2
+    assert c1 != c3
+    assert c1 != c4

@@ -4,6 +4,7 @@ Handles the "VOUnit" unit format.
 """
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
+from ...extern import six
 from ...extern.six.moves import zip
 
 import keyword
@@ -12,6 +13,7 @@ from ...utils.exceptions import AstropyDeprecationWarning
 
 from . import generic
 from . import utils
+from ...utils.misc import did_you_mean
 
 
 class VOUnit(generic.Generic):
@@ -67,12 +69,26 @@ class VOUnit(generic.Generic):
 
         return names, deprecated_names
 
+    def parse(self, s, debug=False):
+        result = self._do_parse(s, debug=debug)
+        if s.count('/') > 1:
+            from ..core import UnitsError
+            raise UnitsError(
+                "'{0}' contains multiple slashes, which is "
+                "disallowed by the VOUnit standard".format(s))
+        return result
+
     @classmethod
-    def _parse_unit(cls, unit):
+    def _parse_unit(cls, unit, detailed_exception=True):
         if unit not in cls._units:
-            raise ValueError(
-                "Unit {0!r} not supported by the VOUnit "
-                "standard.".format(unit))
+            if detailed_exception:
+                raise ValueError(
+                    "Unit {0!r} not supported by the VOUnit "
+                    "standard. {1}".format(
+                        unit, did_you_mean(
+                            unit, cls._units)))
+            else:
+                raise ValueError()
 
         if unit in cls._deprecated_units:
             warnings.warn(

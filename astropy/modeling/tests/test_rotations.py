@@ -1,5 +1,8 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
 
+from __future__ import (absolute_import, unicode_literals, division,
+                        print_function)
+
 from .. import models
 from numpy.testing import utils
 from ...tests.helper import pytest

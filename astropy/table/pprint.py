@@ -2,6 +2,7 @@
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 from ..extern import six
+from ..extern.six import text_type
 from ..extern.six.moves import zip as izip
 from ..extern.six.moves import xrange
 
@@ -9,11 +10,22 @@ import os
 import sys
 import inspect
 
+import numpy as np
+
 from .. import log
 from ..utils.console import Getch, color_print
 from ..config import ConfigurationItem
 
-_format_funcs = {None: lambda format_, val: six.text_type(val)}
+
+if six.PY3:
+    def default_format_func(format_, val):
+        if isinstance(val, bytes):
+            return val.decode('utf-8')
+        else:
+            return str(val)
+    _format_funcs = {None: default_format_func}
+elif six.PY2:
+    _format_funcs = {None: lambda format_, val: text_type(val)}
 
 MAX_LINES = ConfigurationItem('max_lines', 25, 'Maximum number of lines for '
                               'the pretty-printer to use if it cannot determine the terminal size. '
@@ -123,7 +135,7 @@ def _auto_format_func(format_, val):
     return out
 
 
-def _pformat_col(col, max_lines=None, show_name=True, show_unit=False):
+def _pformat_col(col, max_lines=None, show_name=True, show_unit=None):
     """Return a list of formatted string representation of column values.
 
     Parameters
@@ -135,7 +147,9 @@ def _pformat_col(col, max_lines=None, show_name=True, show_unit=False):
         Include column name (default=True)
 
     show_unit : bool
-        Include a header row for unit (default=False)
+        Include a header row for unit.  Default is to show a row
+        for units only if one or more columns has a defined value
+        for the unit.
 
     Returns
     -------
@@ -175,7 +189,9 @@ def _pformat_col_iter(col, max_lines, show_name, show_unit, outs):
         Include column name (default=True)
 
     show_unit : bool
-        Include a header row for unit (default=False)
+        Include a header row for unit.  Default is to show a row
+        for units only if one or more columns has a defined value
+        for the unit.
 
     out : dict
         Must be a dict which is used to pass back additional values
@@ -187,6 +203,7 @@ def _pformat_col_iter(col, max_lines, show_name, show_unit, outs):
     if multidims:
         multidim0 = tuple(0 for n in multidims)
         multidim1 = tuple(n - 1 for n in multidims)
+        trivial_multidims = np.prod(multidims) == 1
 
     col_strs = []  # List of formatted column values
     i_dashes = None
@@ -226,9 +243,15 @@ def _pformat_col_iter(col, max_lines, show_name, show_unit, outs):
     for i in xrange(n_rows):
         if i < i0 or i > i1:
             if multidims:
-                col_str = (format_func(col.format, col[(i,) + multidim0]) +
-                           ' .. ' +
-                           format_func(col.format, col[(i,) + multidim1]))
+                # Prevents colums like Column(data=[[(1,)],[(2,)]], name='a')
+                # with shape (n,1,...,1) from being printed as if there was
+                # more than one element in a row
+                if trivial_multidims:
+                    col_str = format_func(col.format, col[(i,) + multidim0])
+                else:
+                    col_str = (format_func(col.format, col[(i,) + multidim0]) +
+                              ' .. ' +
+                              format_func(col.format, col[(i,) + multidim1]))
             else:
                 col_str = format_func(col.format, col[i])
             yield col_str
@@ -241,7 +264,7 @@ def _pformat_col_iter(col, max_lines, show_name, show_unit, outs):
 
 
 def _pformat_table(table, max_lines=None, max_width=None, show_name=True,
-                   show_unit=False, html=False, tableid=None):
+                   show_unit=None, html=False, tableid=None):
     """Return a list of lines for the formatted string representation of
     the table.
 
@@ -257,7 +280,9 @@ def _pformat_table(table, max_lines=None, max_width=None, show_name=True,
         Include a header row for column names (default=True)
 
     show_unit : bool
-        Include a header row for unit (default=False)
+        Include a header row for unit.  Default is to show a row
+        for units only if one or more columns has a defined value
+        for the unit.
 
     html : bool
         Format the output as an HTML table (default=False)
@@ -279,6 +304,10 @@ def _pformat_table(table, max_lines=None, max_width=None, show_name=True,
     # use and to determine the width
     max_lines, max_width = _get_pprint_size(max_lines, max_width)
     cols = []
+
+    if show_unit is None:
+        show_unit = any([col.unit for col in six.itervalues(table.columns)])
+
     for col in six.itervalues(table.columns):
         lines, n_header = _pformat_col(col, max_lines, show_name,
                                        show_unit)
@@ -332,7 +361,7 @@ def _pformat_table(table, max_lines=None, max_width=None, show_name=True,
 
 
 def _more_tabcol(tabcol, max_lines=None, max_width=None, show_name=True,
-                 show_unit=False):
+                 show_unit=None):
     """Interactive "more" of a table or column.
 
     Parameters
@@ -347,7 +376,9 @@ def _more_tabcol(tabcol, max_lines=None, max_width=None, show_name=True,
         Include a header row for column names (default=True)
 
     show_unit : bool
-        Include a header row for unit (default=False)
+        Include a header row for unit.  Default is to show a row
+        for units only if one or more columns has a defined value
+        for the unit.
     """
     allowed_keys = 'f br<>qhpn'
 

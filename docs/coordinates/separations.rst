@@ -1,8 +1,10 @@
 Separations
 -----------
 
-The on-sky separation is easily computed with the `separation` method, which
-computes the great-circle distance (*not* the small-angle approximation)::
+The on-sky separation is easily computed with the
+:meth:`~astropy.coordinates.SphericalCoordinatesBase.separation` method,
+which computes the great-circle distance (*not* the small-angle
+approximation)::
 
     >>> from astropy.coordinates import ICRS
     >>> c1 = ICRS('5h23m34.5s -69d45m22s')
@@ -12,7 +14,7 @@ computes the great-circle distance (*not* the small-angle approximation)::
     <Angle 20.746118437707... deg>
 
 
-The returned object is an `~astropy.coordinates.angles.Angle` instance, so it
+The returned object is an `~astropy.coordinates.Angle` instance, so it
 is straightforward to access the angle in any of several equivalent angular
 units::
 

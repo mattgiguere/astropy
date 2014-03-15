@@ -1,4 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+
+# TEST_UNICODE_LITERALS
+
 import re
 
 import numpy as np
@@ -386,8 +389,11 @@ def test_null_Ipac():
     data = asciitable.read(f, **testfile['opts'])
     mask = np.array([(True, False, True, False, True),
                      (False, False, False, False, False)],
-                    dtype=[('ra', '|b1'), ('dec', '|b1'), ('sai', '|b1'),
-                           ('v2', '|b1'), ('sptype', '|b1')])
+                    dtype=[(str('ra'), '|b1'),
+                           (str('dec'), '|b1'),
+                           (str('sai'), '|b1'),
+                           (str('v2'), '|b1'),
+                           (str('sptype'), '|b1')])
     assert np.all(data.mask == mask)
 
 
@@ -647,6 +653,10 @@ def get_testfiles(name=None):
          'name': 't/space_delim_no_header.dat',
          'nrows': 2,
          'opts': {'Reader': asciitable.NoHeader}},
+        {'cols': ('col1', 'col2', 'col3'),
+         'name': 't/space_delim_no_header.dat',
+         'nrows': 2,
+         'opts': {'Reader': asciitable.NoHeader, 'header_start': None}},
         {'cols': ('obsid', 'offset', 'x', 'y', 'name', 'oaa'),
          'name': 't/space_delim_blank_lines.txt',
          'nrows': 3,
@@ -663,6 +673,10 @@ def get_testfiles(name=None):
          'cols': ('quoted colname with tab\tinside', 'col2', 'col3'),
          'nrows': 2,
          'opts': {'delimiter': '\s'}},
+        {'name': 't/simple_csv.csv',
+         'cols': ('a','b','c'),
+         'nrows': 2,
+         'opts': {'Reader': asciitable.Csv}},
         {'cols': ('cola', 'colb', 'colc'),
          'name': 't/latex1.tex',
          'nrows': 2,
@@ -680,7 +694,7 @@ def get_testfiles(name=None):
 
 def test_header_start_exception():
     '''Check certain Readers throw an exception if ``header_start`` is set
-    
+
     For certain Readers it does not make sense to set the ``header_start``, they
     throw an exception if you try.
     This was implemented in response to issue #885.
@@ -689,3 +703,23 @@ def test_header_start_exception():
                    ascii.BaseReader, ascii.FixedWidthNoHeader, ascii.Cds, ascii.Daophot]:
         with pytest.raises(ValueError):
             reader = ascii.core._get_reader(readerclass, header_start=5)
+
+
+def test_csv_table_read():
+    """
+    Check for a regression introduced by #1935.  Pseudo-CSV file with
+    commented header line.
+    """
+    lines = ['# a, b',
+             '1, 2',
+             '3, 4']
+    t = ascii.read(lines)
+    assert t.colnames == ['a', 'b']
+
+def test_overlapping_names():
+    """
+    Check that the names argument list can overlap with the existing column names.
+    This tests the issue in #1991.
+    """
+    t = ascii.read(['a b', '1 2'], names=['b', 'a'])
+    assert t.colnames == ['b', 'a']

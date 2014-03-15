@@ -1,3 +1,7 @@
+# -*- coding: utf-8 -*-
+
+# TEST_UNICODE_LITERALS
+
 from __future__ import (absolute_import, division, print_function,
                         unicode_literals)
 
@@ -53,11 +57,11 @@ def test_to_string_decimal():
 def test_to_string_formats():
     a = Angle(1.113355, unit=u.deg)
     assert a.to_string(format='latex') == r'$1^\circ06{}^\prime48.078{}^{\prime\prime}$'
-    assert a.to_string(format='unicode') == '1\xb006\u203248.078\u2033'
+    assert a.to_string(format='unicode') == '1°06′48.078″'
 
     a = Angle(1.113355, unit=u.hour)
     assert a.to_string(format='latex') == r'$1^\mathrm{h}06^\mathrm{m}48.078^\mathrm{s}$'
-    assert a.to_string(format='unicode') == '1\u02b006\u1d5048.078\u02e2'
+    assert a.to_string(format='unicode') == '1ʰ06ᵐ48.078ˢ'
 
     a = Angle(1.113355, unit=u.radian)
     assert a.to_string(format='latex') == r'$1.11336\mathrm{rad}$'
@@ -101,16 +105,16 @@ from .. import ICRS, FK4, FK4NoETerms, FK5, Galactic, AltAz
 def test_coordinate_to_string_vector_hms(frame):
 
     C = frame(np.arange(2)*12.05*u.deg, np.arange(2)*13.5*u.deg)
-    assert C.to_string(precision=0) == ['-0h00m00s 0d00m00s', '0h48m12s 13d30m00s']
-    assert C.to_string(precision=1) == ['-0h00m00.0s 0d00m00.0s', '0h48m12.0s 13d30m00.0s']
+    assert C.to_string(precision=0) == ['0h00m00s 0d00m00s', '0h48m12s 13d30m00s']
+    assert C.to_string(precision=1) == ['0h00m00.0s 0d00m00.0s', '0h48m12.0s 13d30m00.0s']
 
 
 @pytest.mark.parametrize('frame', [Galactic, AltAz])
 def test_coordinate_to_string_vector_dms(frame):
 
     C = frame(np.arange(2)*12.05*u.deg, np.arange(2)*13.5*u.deg)
-    assert C.to_string(precision=0) == ['-0d00m00s 0d00m00s', '12d03m00s 13d30m00s']
-    assert C.to_string(precision=1) == ['-0d00m00.0s 0d00m00.0s', '12d03m00.0s 13d30m00.0s']
+    assert C.to_string(precision=0) == ['0d00m00s 0d00m00s', '12d03m00s 13d30m00s']
+    assert C.to_string(precision=1) == ['0d00m00.0s 0d00m00.0s', '12d03m00.0s 13d30m00.0s']
 
 
 @pytest.mark.parametrize('frame', [ICRS, FK4, FK4NoETerms, FK5])

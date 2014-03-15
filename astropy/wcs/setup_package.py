@@ -14,7 +14,7 @@ from astropy import setup_helpers
 from astropy.extern import six
 
 WCSROOT = os.path.relpath(os.path.dirname(__file__))
-WCSVERSION = "4.10"
+WCSVERSION = "4.20"
 
 
 def b(s):
@@ -26,7 +26,7 @@ if six.PY3:
         s = s.replace(b'\n', b'\\n')
         s = s.replace(b'\0', b'\\0')
         return s.decode('ascii')
-else:
+elif six.PY2:
     def string_escape(s):
         # string_escape has subtle differences with the escaping done in Python
         # 3 so correct for those too

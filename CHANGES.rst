@@ -8,14 +8,28 @@ New Features
 
 - ``astropy.constants``
 
+  - Added ``b_wien`` to represent Wien wavelength displacement law constant.
+    [#2194]
+
 - ``astropy.convolution``
 
 - ``astropy.coordinates``
+
+  - Updated `Angle.dms` and `Angle.hms` to return `namedtuple`s instead of
+    regular tuples, and added `Angle.signed_dms` attribute that gives the
+    absolute value of the `d`, `m`, and `s` along with the sign.  [#1988]
+
+  - By default, `Distance` objects are now required to be positive. To
+    allow negative values, set ``allow_negative=True`` in the `Distance`
+    constructor when creating a `Distance` instance.
 
 - ``astropy.cosmology``
 
   - `age` and `comoving_volume` convenience functions have been added to
     `astropy.cosmology`. [#1902]
+
+  - Added `astropy.cosmology.z_at_value` to find the redshift at which a
+    cosmology function matches a desired value. [#1909]
 
 - ``astropy.io.ascii``
 
@@ -31,6 +45,9 @@ New Features
     that the header line was read again as the first data line
     [#855 and #1844].
 
+  - A new ``csv`` format was added as a convenience for handling CSV (comma-
+    separated values) data. [#1935]
+
 - ``astropy.io.fits``
 
 - ``astropy.io.misc``
@@ -45,6 +62,18 @@ New Features
 
 - ``astropy.stats``
 
+- ``astropy.sphinx``
+
+  - The `automodapi` and `automodsumm` extensions now include sphinx
+    configuration options to write out what `automidapi` and
+    `automodsumm` generate, mainly for debugging purposes. [#1975, #2022]
+
+  - Reference documentation now shows functions/class docstrings at the
+    inteded user-facing API location rather than the actual file where
+    the implementation is found. [#1826]
+  - The `automodsumm` extension configuration was changed to generate
+    documentation of class `__call__` member functions. [#1817, #2135]
+
 - ``astropy.table``
 
 - ``astropy.time``
@@ -52,7 +81,24 @@ New Features
   - Mean and apparent sidereal time can now be calculated using the
     `sidereal_time` method [#1418].
 
+  - The time scale now defaults to UTC if no scale is provided. [#2091]
+
+  - `TimeDelta` objects can have all scales but UTC, as well as, for
+    consistency with time-like quantities, undefined scale (where the
+    scale is taken from the object one adds to or subtracts from).
+    This allows, e.g., to work consistently in TDB.  [#1932]
+
 - ``astropy.units``
+
+  - Support for the unit format `Office of Guest Investigator Programs
+    (OGIP) FITS files
+    <http://heasarc.gsfc.nasa.gov/docs/heasarc/ofwg/docs/general/ogip_93_001/>`__
+    has been added. [#377]
+
+  - :func:`astropy.units.equivalencies.spectral` can now handle angular
+    wave number. [#1306 and #1899]
+
+  - Added `one` as a shortcut to `dimensionless_unscaled`. [#1980]
 
 - ``astropy.utils``
 
@@ -60,6 +106,9 @@ New Features
     in its ``do_fit()`` method. [#1896]
 
 - ``astropy.vo``
+
+  - A new sub-package, `astropy.vo.samp`, is now available (this was previously
+    the SAMPy package, which has been refactored for use in Astropy). [#1907]
 
 - ``astropy.wcs``
 
@@ -88,13 +137,23 @@ API Changes
 
 - ``astropy.modeling``
 
+  - The method computing the derivative of the model with respect
+    to parameters was renamed from `deriv` to `fit_deriv`. [#1739]
+
 - ``astropy.nddata``
 
 - ``astropy.stats``
 
 - ``astropy.table``
 
+  - The default table printing function now shows a table header row
+    for units if any columns have the unit attribute set.  [#1282]
+
 - ``astropy.time``
+
+  - Correct use of UT in TDB calculation [#1938, #1939].
+
+  - ``TimeDelta`` objects can have scales other than TAI [#1932].
 
 - ``astropy.units``
 
@@ -120,6 +179,12 @@ Bug Fixes
 
 - ``astropy.cosmology``
 
+  - The distance modulus function in ``astropy.cosmology`` can now handle
+    negative distances, which can occur in certain closed cosmologies. [#2008]
+
+  - Removed accidental imports of some extraneous variables in
+    `astropy.cosmology` [#2025]
+
 - ``astropy.io.ascii``
 
 - ``astropy.io.fits``
@@ -129,6 +194,11 @@ Bug Fixes
 - ``astropy.io.registry``
 
 - ``astropy.io.votable``
+
+  - It is now possible to save an ``astropy.table.Table`` object as a
+    VOTable with any of the supported data formats, ``tabledata``,
+    ``binary`` and ``binary2``, by using the ``tabledata_format``
+    kwarg. [#2138]
 
 - ``astropy.modeling``
 
@@ -140,6 +210,9 @@ Bug Fixes
 
 - ``astropy.time``
 
+  - Correct UT1->UTC->UT1 round-trip being off by 1 second if UT1 is
+    on a leap second. [#2077]
+
 - ``astropy.units``
 
 - ``astropy.utils``
@@ -148,35 +221,54 @@ Bug Fixes
 
 - ``astropy.wcs``
 
-  - `astropy.wcs.WCS`, `astropy.wcs.WCS.fix` and
-    `astropy.wcs.find_all_wcs` now have a `translate_units` keyword
-    argument that is passed down to `astropy.wcs.Wcsprm.fix`.  This
-    can be used to specify any unsafe translations of units from
-    rarely used ones to more commonly used ones.
+  - astropy now requires wcslib version 4.20 or later.  The version of
+    wcslib included with astropy has likewise been updated to version
+    4.20.
 
-    Although ``"S"`` is commonly used to represent seconds,
-    its translation to ``"s"`` is potentially unsafe since the
-    standard recognizes ``"S"`` formally as Siemens, however
-    rarely that may be used.  The same applies to ``"H"`` for
-    hours (Henry), and ``"D"`` for days (Debye).
+    - This version of wcslib brings some bugfixes from the astropy
+      project (described below) and tighter bounds checking.
 
-    When these sorts of changes are performed, a warning is emitted
-    (but this reporting requires a patched version of wcslib,
-    distributed with astropy). [#1854]
-
-  - When a unit is "fixed" by `astropy.wcs.WCS.fix` or
-    `astropy.wcs.Wcsprm.unitfix`, it now correctly reports the
-    ``CUNIT`` field that was changed.  (This requires that astropy
-    was built with the locally distributed version of wcslib). [#1854]
+  - A new method, `astropy.wcs.Wcsprm.bounds_check` (corresponding to
+    wcslib's ``wcsbchk``) has been added to control what bounds
+    checking is performed by wcslib.
 
   - `astropy.wcs.WCS.to_header` will now raise a more meaningful
     exception when the WCS information is inavlid or inconsistent in
     some way. [#1854]
 
+  - If the C extension for `astropy.wcs` was not built or fails to
+    import for any reason, ``import astropy.wcs`` will result in an
+    `ImportError`, rather than getting obscure errors once the
+    `astropy.wcs` is used. [#2061]
+
 Other Changes and Additions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-0.3.1 (unreleased)
+- ``python setup.py test --coverage`` will now give more accurate
+  results, because the coverage analysis will include early imports of
+  astropy.  There doesn't seem to be a way to get this to work when
+  doing ``import astropy; astropy.test()``, so the ``coverage``
+  keyword to ``astropy.test`` has been removed.  Coverage testing now
+  depends only on `coverage.py
+  <http://nedbatchelder.com/code/coverage/>`__, not
+  ``pytest-cov``. [#2112]
+
+- The included version of py.test has been upgraded to 2.5.1. [#1970]
+
+- The included version of six.py has been upgraded to 1.5.2. [#2006]
+
+- Where appropriate, tests are now run both with and without the
+  ``unicode_literals`` option to ensure that we support both cases. [#1962]
+
+- A monkey patch is performed to fix a bug in Numpy version 1.7 and
+  earlier where unicode fill values on masked arrays are not
+  supported.  This may cause unintended side effects if your
+  application also monkey patches ``numpy.ma`` or relies on the broken
+  behavior.  If unicode support of masked arrays is important to your
+  application, upgrade to Numpy 1.8 or later for best results. [#2059]
+
+
+0.3.2 (unreleased)
 ------------------
 
 Bug Fixes
@@ -190,9 +282,6 @@ Bug Fixes
 
 - ``astropy.coordinates``
 
-  - Fixed a bug where sexagesimal notation would sometimes include
-    exponential notation in the last field. [#1908, #1913]
-
 - ``astropy.cosmology``
 
 - ``astropy.io.ascii``
@@ -202,6 +291,98 @@ Bug Fixes
 - ``astropy.io.misc``
 
 - ``astropy.io.registry``
+
+- ``astropy.io.votable``
+
+  - By default, floating point values are now written out using
+    ``repr`` rather than ``str`` to preserve precision [#2137]
+
+- ``astropy.modeling``
+
+- ``astropy.nddata``
+
+- ``astropy.sphinx``
+
+- ``astropy.stats``
+
+  - Ensure the ``axis`` keyword in :func:`astropy.stats.funcs` can now
+    be used for all axes. [#2173]
+
+- ``astropy.table``
+
+- ``astropy.time``
+
+- ``astropy.units``
+
+- ``astropy.utils``
+
+- ``astropy.vo``
+
+- ``astropy.wcs``
+
+- Misc
+
+Other Changes and Additions
+^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+0.3.1 (2014-03-04)
+------------------
+
+Bug Fixes
+^^^^^^^^^
+
+- ``astropy.config``
+
+  - Fixed a bug where ``ConfigurationItem.set_temp()`` does not reset to
+    default value when exception is raised within ``with`` block. [#2117]
+
+- ``astropy.convolution``
+
+  - Fixed a bug where ``_truncation`` was left undefined for ``CustomKernel``.
+    [#2016]
+
+  - Fixed a bug with ``_normalization`` when ``CustomKernel`` input array
+    sums to zero. [#2016]
+
+- ``astropy.coordinates``
+
+  - Fixed a bug where using ``==`` on two array coordinates wouldn't
+    work. [#1832]
+
+  - Fixed bug which caused `len()` not to work for coordinate objects
+    and added a `shape` property to get appropriately array-like
+    behavior. [#1761, #2014]
+
+  - Fixed a bug where sexagesimal notation would sometimes include
+    exponential notation in the last field. [#1908, #1913]
+
+  - ``astropy.coordinates.transformations.CompositeStaticMatrixTransform``
+    no longer attempts to reference the undefined variable
+    ``self.matrix`` during instantiation. [#1944]
+
+  - Fixed pickling of ``Longitude``, ensuring ``wrap_angle`` is
+    preserved [#1961]
+
+  - Allow `sep` argument in `Angle.to_string` to be empty (resulting in no
+    separators) [#1989]
+
+- ``astropy.io.ascii``
+
+  - Allow passing unicode delimiters when reading or writing tables.
+    The delimiter must be convertible to pure ASCII.  [#1949]
+
+  - Fix a problem when reading a table and renaming the columns to names
+    that already exist. [#1991]
+
+- ``astropy.io.fits``
+
+  - Ported all bug fixes from PyFITS 3.2.1.  See the PyFITS changelog at
+    http://pyfits.readthedocs.org/en/v3.2.1/ [#2056]
+
+- ``astropy.io.misc``
+
+  - Fixed issues in the HDF5 Table reader/writer functions that occurred on
+    Windows. [#2099]
 
 - ``astropy.io.votable``
 
@@ -222,14 +403,21 @@ Bug Fixes
 
   - Fixed bug in computation of model derivatives in `LinearLSQFitter`. [#1903]
 
-- ``astropy.nddata``
+  - Raise a `NotImplementedError` when fitting composite models. [#1915]
 
-- ``astropy.stats``
+  - Fixed bug in computation of ``Gaussian2D`` model. [#2038]
+
+- ``astropy.sphinx``
+
+  - Added slightly more useful debug info for AstropyAutosummary. [#2024]
 
 - ``astropy.table``
 
+  - The column string representation for n-dimensional cells with only
+    one element has been fixed. [#1522]
+
   - Fix a problem that caused MaskedColumn.__getitem__ to not preserve column
-    metadata. [#1471]
+    metadata. [#1471, #1872]
 
   - With Numpy prior to version 1.6.2, tables with Unicode columns now
     sort correctly. [#1867]
@@ -243,13 +431,32 @@ Bug Fixes
 
   - Allow pickling of ``Table``, ``Column``, and ``MaskedColumn`` objects. [#792]
 
+  - Fix a problem where it was not possible to rename columns after sorting or
+    adding a row. [#2039]
+
 - ``astropy.time``
+
+  - Fix a problem where scale conversion problem in TimeFromEpoch
+    was not showing a useful error [#2046]
 
   - Fix a problem when converting to one of the formats `unix`,
     `cxcsec`, `gps` or `plot_date` when the time scale is `UT1`, `TDB`
     or `TCB` [#1732]
 
+  - Ensure that ``delta_ut1_utc`` gets calculated when accessed directly,
+    instead of failing and giving a rather obscure error message [#1925]
+
+  - Fix a bug when computing the TDB to TT offset.  The transform routine was
+    using meters instead of kilometers for the Earth vector.  [#1929]
+
+  - Increase ``__array_priority__`` so that ``TimeDelta`` can convert itself
+    to a ``Quantity`` also in reverse operations [#1940]
+
+  - Correct hop list from TCG to TDB to ensure that conversion is
+    possible [#2074]
+
 - ``astropy.units``
+
   - ``Quantity`` initialisation rewritten for speed [#1775]
 
   - Fixed minor string formatting issue for dimensionless quantities. [#1772]
@@ -259,13 +466,60 @@ Bug Fixes
   - The definition of the unit `bar` has been corrected to `1e5
     Pascal` from `100 Pascal` [#1910]
 
+  - For units that are close to known units, but not quite, for
+    example due to differences in case, the exception will now include
+    recommendations. [#1870]
+
+  - The generic and FITS unit parsers now accept multiple slashes in
+    the unit string.  There are multiple ways to interpret them, but
+    the approach taken here is to convert "m/s/kg" to "m s-1 kg-1".
+    Multiple slashes are accepted, but discouraged, by the FITS
+    standard, due to the ambiguity of parsing, so a warning is raised
+    when it is encountered. [#1911]
+
+  - The use of ``angstrom`` (with a lower case ``a``) is now accepted
+    in FITS unit strings, since it is in common usage.  However, since
+    it is not officially part of the FITS standard, a warning will be
+    issued when it is encountered.  [#1911]
+
+  - Pickling unrecognized units will not raise a
+    `AttributeError`. [#2047]
+
+  - `astropy.units` now correctly preserves the precision of
+    fractional powers. [#2070]
+
+  - If a ``Unit`` or ``Quantity`` is raised to a floating point power
+    that is very close to a rational number with a denominator less
+    than or equal to 10, it is converted to a `Fraction` object to
+    preserve its precision through complex unit conversion operations.
+    [#2070]
+
 - ``astropy.utils``
 
   - Bug fix for :func:`astropy.utils.timer.RunTimePredictor.do_fit`. [#1905]
 
-- ``astropy.vo``
+  - Fixed `astropy.utils.compat.argparse` for Python 3.1. [#2017]
 
 - ``astropy.wcs``
+
+  - `astropy.wcs.WCS`, `astropy.wcs.WCS.fix` and
+    `astropy.wcs.find_all_wcs` now have a `translate_units` keyword
+    argument that is passed down to `astropy.wcs.Wcsprm.fix`.  This
+    can be used to specify any unsafe translations of units from
+    rarely used ones to more commonly used ones.
+
+    Although ``"S"`` is commonly used to represent seconds,
+    its translation to ``"s"`` is potentially unsafe since the
+    standard recognizes ``"S"`` formally as Siemens, however
+    rarely that may be used.  The same applies to ``"H"`` for
+    hours (Henry), and ``"D"`` for days (Debye).
+
+    When these sorts of changes are performed, a warning is emitted.
+    [#1854]
+
+  - When a unit is "fixed" by `astropy.wcs.WCS.fix` or
+    `astropy.wcs.Wcsprm.unitfix`, it now correctly reports the
+    ``CUNIT`` field that was changed. [#1854]
 
   - `astropy.wcs.Wcs.printwcs` will no longer warn that `cdelt` is
     being ignored when none was present in the FITS file. [#1845]
@@ -273,11 +527,36 @@ Bug Fixes
   - A new function, `astropy.wcs.get_include`, has been added to get
     the location of the `astropy.wcs` C header files. [#1755]
 
+  - `astropy.wcs.Wcsprm.set` is called from within the
+    `astropy.wcs.WCS` constructor, therefore any invalid information
+    in the keywords will be raised from the constructor, rather than
+    on a subsequent call to a transformation method. [#1918]
+
+  - Fix a memory corruption bug when using `astropy.wcs.Wcs.sub` with
+    `~astropy.wcs.WCSSUB_CELESTIAL`. [#1960]
+
+  - Fixed the AttributeError exception which was raised when using
+    :func:`astropy.wcs.WCS.footprint_to_file`. [#1912]
+
+  - Fixed a NameError exception which was raised when using
+    :func:`astropy.wcs.validate` or the `wcslint` script. [#2053]
+
+  - Fixed a bug where named WCSes may be erroneously reported as ``'
+    '`` when using :func:`astropy.wcs.validate` or the `wcslint`
+    script. [#2053]
+
+  - Fixed a bug where error messages about incorrect header keywords
+    may not be propagated correctly, resulting in a "NULL error object
+    in wcslib" message. [#2106]
+
 - Misc
 
   - There are a number of improvements to make `astropy` work better
     on big endian platforms, such as MIPS, PPC, s390x and
     SPARC. [#1849]
+
+  - The test suite will now raise exceptions when a deprecated feature
+    of Python or Numpy is used.  [#1948]
 
 Other Changes and Additions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -289,6 +568,7 @@ Other Changes and Additions
 
 - Fix a problem where import fails on Python 3 if setup.py exists
   in current directory. [#1877]
+
 
 0.3 (2013-11-20)
 ----------------
@@ -547,6 +827,8 @@ New Features
     and service validation. [#552]
 
 - ``astropy.wcs``
+
+  - Fixed attribute error in ``astropy.wcs.Wcsprm`` (lattype->lattyp) [#1463]
 
   - Included a new command-line script called ``wcslint`` and accompanying API
     for validating the WCS in a given FITS file or header. [#580]

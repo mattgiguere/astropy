@@ -45,7 +45,10 @@ from . import _docutil as __
 try:
     from . import _wcs
 except ImportError:
-    _wcs = None
+    if not _ASTROPY_SETUP_:
+        raise
+    else:
+        _wcs = None
 
 from ..utils import deprecated, deprecated_attribute
 from ..utils.exceptions import AstropyWarning, AstropyUserWarning, AstropyDeprecationWarning
@@ -95,6 +98,9 @@ if _wcs is not None:
     UnitConverter = deprecated(
         '0.2', name='UnitConverter', alternative='astropy.units')(
             UnitConverter)
+    # This is to make Sphinx happy so it thinks the class comes from
+    # this file and will document it.
+    UnitConverter.__module__ = __name__
 else:
     WCSBase = object
     Wcsprm = object
@@ -282,11 +288,16 @@ class WCS(WCSBase):
 
     3. When the header includes duplicate keywords, in most cases the
        last encountered is used.
+
+    4. `~astropy.wcs.Wcsprm.set` is called immediately after
+       construction, so any invalid keywords or transformations will
+       be raised by the constructor, not when subsequently calling a
+       transformation method.
     """
 
     def __init__(self, header=None, fobj=None, key=' ', minerr=0.0,
                  relax=True, naxis=None, keysel=None, colsel=None,
-                 fix=True, translate_units=''):
+                 fix=True, translate_units='', _do_set=True):
         close_fds = []
 
         if header is None:
@@ -390,6 +401,9 @@ naxis kwarg.
 
         if fix:
             self.fix(translate_units=translate_units)
+
+        if _do_set:
+            self.wcs.set()
 
         for fd in close_fds:
             fd.close()
@@ -951,7 +965,7 @@ naxis kwarg.
             raise ValueError(
                 "WCS does not have longitude type of 'RA', therefore " +
                 "(ra, dec) data can not be used as input")
-        if self.wcs.lattype != 'DEC':
+        if self.wcs.lattyp != 'DEC':
             raise ValueError(
                 "WCS does not have longitude type of 'DEC', therefore " +
                 "(ra, dec) data can not be used as input")
@@ -981,7 +995,7 @@ naxis kwarg.
             raise ValueError(
                 "WCS does not have longitude type of 'RA', therefore " +
                 "(ra, dec) data can not be returned")
-        if self.wcs.lattype != 'DEC':
+        if self.wcs.lattyp != 'DEC':
             raise ValueError(
                 "WCS does not have longitude type of 'DEC', therefore " +
                 "(ra, dec) data can not be returned")
@@ -1176,11 +1190,6 @@ naxis kwarg.
 
         {1}
 
-        tolerance : float, optional
-            Tolerance of solution. Iteration terminates when the iterative
-            solver estimates that the true solution is within this many pixels
-            current estimate. Default value is 1e-6 (pixels).
-
         Returns
         -------
 
@@ -1273,6 +1282,11 @@ naxis kwarg.
             two-argument form must be used.
 
         {1}
+
+        tolerance : float, optional
+            Tolerance of solution. Iteration terminates when the iterative
+            solver estimates that the true solution is within this many pixels
+            current estimate. Default value is 1e-6 (pixels).
 
         Returns
         -------
@@ -1707,7 +1721,7 @@ naxis kwarg.
         f.write(comments)
         f.write('linear\n')
         f.write('polygon(')
-        self.footprint.tofile(f, sep=',')
+        self.calcFootprint().tofile(f, sep=',')
         f.write(') # color={0}, width={1:d} \n'.format(color, width))
         f.close()
 
@@ -1965,7 +1979,7 @@ def find_all_wcs(header, relax=True, keysel=None, fix=True,
 
     result = []
     for wcsprm in wcsprms:
-        subresult = WCS(fix=False)
+        subresult = WCS(fix=False, _do_set=False)
         subresult.wcs = wcsprm
         result.append(subresult)
 
@@ -2063,10 +2077,13 @@ def validate(source):
                 hdu.header, relax=True, fix=False, _do_set=False)
 
         for wcs in wcses:
-            wcs_results = _WcsValidateWcsResult(wcs.wcs.name)
+            wcs_results = _WcsValidateWcsResult(wcs.wcs.alt)
             hdu_results.append(wcs_results)
 
-            del __warningregistry__
+            try:
+                del __warningregistry__
+            except NameError:
+                pass
 
             with warnings.catch_warnings(record=True) as warning_lines:
                 warnings.resetwarnings()
@@ -2075,8 +2092,8 @@ def validate(source):
 
                 try:
                     WCS(hdu.header,
-                        key=wcs.wcs.name or ' ',
-                        relax=True, fix=True)
+                        key=wcs.wcs.alt or ' ',
+                        relax=True, fix=True, _do_set=False)
                 except WcsError as e:
                     wcs_results.append(str(e))
 

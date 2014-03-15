@@ -4,7 +4,12 @@ This module contains simple input/output related functionality that is not
 part of a larger framework or standard.
 """
 
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import sys
+
+from ...extern import six
 
 
 __all__ = ['fnpickle', 'fnunpickle']
@@ -43,12 +48,12 @@ def fnunpickle(fileorname, number=0, usecPickle=True):
 
     """
 
-    if usecPickle and sys.version_info[0] < 3:  # pragma: py2
+    if usecPickle and six.PY2:
         import cPickle as pickle
     else:
         import pickle
 
-    if isinstance(fileorname, basestring):
+    if isinstance(fileorname, six.string_types):
         f = open(fileorname, 'rb')
         close = True
     else:
@@ -100,7 +105,7 @@ def fnpickle(object, fileorname, usecPickle=True, protocol=None, append=False):
 
     """
 
-    if usecPickle and sys.version_info[0] < 3:  # pragma: py2
+    if usecPickle and six.PY2:
         import cPickle as pickle
     else:
         import pickle
@@ -108,7 +113,7 @@ def fnpickle(object, fileorname, usecPickle=True, protocol=None, append=False):
     if protocol is None:
         protocol = pickle.HIGHEST_PROTOCOL
 
-    if isinstance(fileorname, basestring):
+    if isinstance(fileorname, six.string_types):
         f = open(fileorname, 'ab' if append else 'wb')
         close = True
     else:

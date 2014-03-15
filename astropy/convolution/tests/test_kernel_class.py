@@ -1,4 +1,7 @@
 # Licensed under a 3-clause BSD style license - see LICENSE.rst
+from __future__ import (absolute_import, division, print_function,
+                        unicode_literals)
+
 import itertools
 
 import numpy as np
@@ -10,10 +13,10 @@ from ..kernels import (
     Gaussian1DKernel, Gaussian2DKernel, Box1DKernel, Box2DKernel,
     Trapezoid1DKernel, TrapezoidDisk2DKernel, MexicanHat1DKernel,
     Tophat2DKernel, MexicanHat2DKernel, AiryDisk2DKernel, Ring2DKernel,
-    CustomKernel)
+    CustomKernel, Model1DKernel, Model2DKernel)
 
 from ..utils import KernelSizeError
-from ...modeling.models import Box2D
+from ...modeling.models import Box2D, Gaussian1D, Gaussian2D
 
 try:
     from scipy.ndimage import filters
@@ -184,9 +187,27 @@ class TestKernels(object):
         gauss = 1 * Gaussian1DKernel(3)
         assert np.all(np.abs(3 * gauss.array - gauss * 3) < 0.000001)
 
+    def test_model_1D_kernel(self):
+        """
+        Check Model1DKernel against Gaussian1Dkernel
+        """
+        gauss = Gaussian1D(1. / np.sqrt(2 * np.pi * 25), 0, 5)
+        model_gauss_kernel = Model1DKernel(gauss, x_size=21)
+        gauss_kernel = Gaussian1DKernel(5, x_size=21)
+        assert_almost_equal(model_gauss_kernel.array, gauss_kernel.array, decimal=12)
+
+    def test_model_2D_kernel(self):
+        """
+        Check Model2DKernel against Gaussian2Dkernel
+        """
+        gauss = Gaussian2D(1. / (2 * np.pi * 25), 0, 0, 5, 5)
+        model_gauss_kernel = Model2DKernel(gauss, x_size=21)
+        gauss_kernel = Gaussian2DKernel(5, x_size=21)
+        assert_almost_equal(model_gauss_kernel.array, gauss_kernel.array, decimal=12)
+
     def test_custom_1D_kernel(self):
         """
-        Check if CustomKernel against Box1DKernel.
+        Check CustomKernel against Box1DKernel.
         """
         #Define one dimensional array:
         array = np.ones(5)
@@ -200,7 +221,7 @@ class TestKernels(object):
 
     def test_custom_2D_kernel(self):
         """
-        Check if CustomKernel against Box1DKernel.
+        Check CustomKernel against Box2DKernel.
         """
         #Define one dimensional array:
         array = np.ones((5, 5))
@@ -228,9 +249,29 @@ class TestKernels(object):
                                [1, 1, 1]])
         assert custom.is_bool == True
 
+    def test_custom_1D_kernel_zerosum(self):
+        """
+        Check if CustomKernel works when the input array/list
+        sums to zero.
+        """
+        custom = CustomKernel([-2, -1, 0, 1, 2])
+        assert custom.truncation == 0.
+        assert custom.normalization == np.inf
+
+    def test_custom_2D_kernel_zerosum(self):
+        """
+        Check if CustomKernel works when the input array/list
+        sums to zero.
+        """
+        custom = CustomKernel([[0, -1, 0],
+                               [-1, 4, -1],
+                               [0, -1, 0]])
+        assert custom.truncation == 0.
+        assert custom.normalization == np.inf
+
     def test_custom_kernel_odd_error(self):
         """
-        Check if CustomKErnel raises if the array size is odd.
+        Check if CustomKernel raises if the array size is odd.
         """
         with pytest.raises(KernelSizeError):
             custom = CustomKernel([1, 1, 1, 1])
@@ -351,3 +392,5 @@ class TestKernels(object):
         kernel_2D = Box2DKernel(width)
         assert np.all([_ % 2 != 0 for _ in kernel_2D.shape])
         assert kernel_2D.array.sum() == 1.
+
+
