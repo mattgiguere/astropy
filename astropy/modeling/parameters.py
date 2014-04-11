@@ -105,10 +105,14 @@ class Parameter(object):
     # See the _nextid classmethod
     _nextid = 1
 
-    def __init__(self, name, description='', default=None, getter=None,
+    def __init__(self, name='', description='', default=None, getter=None,
                  setter=None, fixed=False, tied=False, min=None, max=None,
                  model=None):
         super(Parameter, self).__init__()
+
+        if model is not None and not name:
+            raise TypeError('Bound parameters must have a name specified.')
+
         self._name = name
         self.__doc__ = description.strip()
         self._default = default
@@ -297,8 +301,6 @@ class Parameter(object):
             assert isinstance(value, bool), "Fixed can be True or False"
             fixed = self._model._constraints.setdefault('fixed', {})
             fixed[self._name] = value
-            self._model._fit_parameters, self._model._fit_param_indices, \
-                = self._model._model_to_fit_params()
         else:
             raise AttributeError("can't set attribute 'fixed' on Parameter "
                                  "definition")
@@ -326,8 +328,6 @@ class Parameter(object):
                     "Tied must be a callable"
             tied = self._model._constraints.setdefault('tied', {})
             tied[self._name] = value
-            self._model._fit_parameters, self._model._fit_param_indices, \
-                = self._model._model_to_fit_params()
         else:
             raise AttributeError("can't set attribute 'tied' on Parameter "
                                  "definition")
@@ -361,7 +361,6 @@ class Parameter(object):
 
             bounds = self._model._constraints.setdefault('bounds', {})
             bounds[self._name] = (_min, _max)
-            self._model._model_to_fit_params()
         else:
             raise AttributeError("can't set attribute 'bounds' on Parameter "
                                  "definition")

@@ -11,11 +11,13 @@ from ..constants import si as _si
 from . import si
 from . import cgs
 from . import astrophys
+from . import dimensionless_unscaled
 
 
 __all__ = ['parallax', 'spectral', 'spectral_density', 'doppler_radio',
            'doppler_optical', 'doppler_relativistic', 'mass_energy',
-           'brightness_temperature', 'dimensionless_angles']
+           'brightness_temperature', 'dimensionless_angles',
+           'logarithmic', 'temperature']
 
 
 def dimensionless_angles():
@@ -26,6 +28,14 @@ def dimensionless_angles():
     and indepedent of whether it is part of a more complicated unit.
     """
     return [(si.radian, None)]
+
+
+def logarithmic():
+    """Allow logarithmic units to be converted to dimensionless fractions"""
+    return [
+        (dimensionless_unscaled, astrophys.dex,
+         lambda x: np.log10(x), lambda x: 10.**x)
+    ]
 
 
 def parallax():
@@ -448,3 +458,15 @@ def brightness_temperature(beam_area, disp):
         return (x_K * beam / factor)
 
     return [(astrophys.Jy, si.K, convert_Jy_to_K, convert_K_to_Jy)]
+
+
+def temperature():
+    """Convert between Kelvin, Celsius, and Fahrenheit here because
+    Unit and CompositeUnit cannot do addition or subtraction properly.
+    """
+    from .imperial import deg_F
+    return [
+        (si.K, si.deg_C, lambda x: x - 273.15, lambda x: x + 273.15),
+        (si.deg_C, deg_F, lambda x: x * 1.8 + 32.0, lambda x: (x - 32.0) / 1.8),
+        (si.K, deg_F, lambda x: (x - 273.15) * 1.8 + 32.0,
+         lambda x: ((x - 32.0) / 1.8) + 273.15)]

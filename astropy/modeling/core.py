@@ -131,8 +131,23 @@ class _ModelMeta(abc.ABCMeta):
 
     def __new__(mcls, name, bases, members):
         param_names = members.get('param_names', [])
-        parameters = dict((value.name, value) for value in members.values()
-                          if isinstance(value, Parameter))
+        parameters = {}
+        for key, value in members.items():
+            if not isinstance(value, Parameter):
+                continue
+            if not value.name:
+                # Name not explicitly given in the constructor; add the name
+                # automatically via the attribute name
+                value._name = key
+                value._attr = '_' + key
+            if value.name != key:
+                raise ModelDefinitionError(
+                    "Parameters must be defined with the same name as the "
+                    "class attribute they are assigned to.  Parameters may "
+                    "take their name from the class attribute automatically "
+                    "if the name argument is not given when initializing "
+                    "them.")
+            parameters[value.name] = value
 
         # If no parameters were defined get out early--this is especially
         # important for PolynomialModels which take a different approach to
@@ -641,35 +656,6 @@ class ParametricModel(Model):
             setattr(self, name, value)
 
 
-    def _model_to_fit_params(self):
-        """
-        Create a set of parameters to be fitted.
-
-        These may be a subset of the model parameters, if some of them are held
-        constant or tied.
-
-        This is an adapter of the model parameters to fitters, none of which
-        currently support parameters with tied/fixed constraints.
-
-        TODO: It may make more sense to make this adaptation on the Fitter end,
-        since one could conceivably implement a fitter from scratch (for
-        Astropy specifically) that understands how to use tied constraints, for
-        example.
-        """
-
-        fitparam_indices = list(range(len(self.param_names)))
-        if any(self.fixed.values()) or any(self.tied.values()):
-            params = list(self.parameters)
-            for idx, name in list(enumerate(self.param_names))[::-1]:
-                if self.fixed[name] or self.tied[name]:
-                    sl = self._param_metrics[name][0]
-                    del params[sl]
-                    del fitparam_indices[idx]
-            return (np.array(params), fitparam_indices)
-        else:
-            return (self.parameters, fitparam_indices)
-
-
 class LabeledInput(dict):
     """
     Create a container with all input data arrays, assigning labels for
@@ -847,7 +833,7 @@ class SerialCompositeModel(_CompositeModel):
         >>> import numpy as np
         >>> from astropy.modeling import models, LabeledInput, SerialCompositeModel
         >>> y, x = np.mgrid[:5, :5]
-        >>> rotation = models.MatrixRotation2D(angle=23.5)
+        >>> rotation = models.Rotation2D(angle=23.5)
         >>> offset_x = models.Shift(-4.23)
         >>> offset_y = models.Shift(2)
         >>> labeled_input = LabeledInput([x, y], ["x", "y"])

@@ -12,10 +12,13 @@ import copy
 import numpy as np
 from numpy.testing import (assert_allclose, assert_array_equal,
                            assert_array_almost_equal)
+from distutils import version
+NUMPY_VERSION = version.LooseVersion(np.__version__)
 
 from ...tests.helper import raises, pytest
 from ...utils import isiterable
 from ... import units as u
+from ...units.quantity import _UNIT_NOT_INITIALISED
 from ...extern.six.moves import xrange
 from ...extern.six.moves import cPickle as pickle
 from ...extern import six
@@ -581,6 +584,20 @@ class TestQuantityDisplay(object):
         assert format(self.scalarfloatq, '.1f') == "1.3 m"
         assert format(self.scalarfloatq, '.0f') == "1 m"
 
+    def test_uninitialized_unit_format(self):
+        bad_quantity = np.arange(10.).view(u.Quantity)
+        assert str(bad_quantity).endswith(_UNIT_NOT_INITIALISED)
+        assert repr(bad_quantity).endswith(_UNIT_NOT_INITIALISED + '>')
+
+    def test_repr_latex(self):
+        q2 = u.Quantity(1.5e14, 'm/s')
+        assert self.scalarintq._repr_latex_() == '$1 \\; \\mathrm{m}$'
+        assert self.scalarfloatq._repr_latex_() == '$1.3 \\; \\mathrm{m}$'
+        assert (q2._repr_latex_() ==
+                '$1.5\\times 10^{+14} \\; \\mathrm{\\frac{m}{s}}$')
+        with pytest.raises(NotImplementedError):
+            self.arrq._repr_latex_()
+
 
 def test_decompose():
     q1 = 5 * u.N
@@ -810,14 +827,30 @@ def test_quantity_iterability():
 
 def test_copy():
 
-    q1 = u.Quantity(np.array([1., 2., 3.]), unit=u.m)
+    q1 = u.Quantity(np.array([[1., 2., 3.], [4., 5., 6.]]), unit=u.m)
     q2 = q1.copy()
 
     assert np.all(q1.value == q2.value)
     assert q1.unit == q2.unit
     assert q1.dtype == q2.dtype
-
     assert q1.value is not q2.value
+
+    if NUMPY_VERSION < version.LooseVersion('1.6.0'):
+        return  # numpy 1.5 doesn't allow arguments to `copy`
+
+    q3 = q1.copy(order='F')
+    assert q3.flags['F_CONTIGUOUS']
+    assert np.all(q1.value == q3.value)
+    assert q1.unit == q3.unit
+    assert q1.dtype == q3.dtype
+    assert q1.value is not q3.value
+
+    q4 = q1.copy(order='C')
+    assert q4.flags['C_CONTIGUOUS']
+    assert np.all(q1.value == q4.value)
+    assert q1.unit == q4.unit
+    assert q1.dtype == q4.dtype
+    assert q1.value is not q4.value
 
 
 def test_deepcopy():

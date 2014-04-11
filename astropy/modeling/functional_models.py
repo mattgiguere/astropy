@@ -90,9 +90,9 @@ class Gaussian1D(Parametric1DModel):
     Gaussian2D, Box1D, Beta1D, Lorentz1D
     """
 
-    amplitude = Parameter('amplitude')
-    mean = Parameter('mean')
-    stddev = Parameter('stddev')
+    amplitude = Parameter()
+    mean = Parameter()
+    stddev = Parameter()
 
     def __init__(self, amplitude, mean, stddev, **constraints):
         try:
@@ -136,17 +136,18 @@ class Gaussian2D(Parametric2DModel):
         Mean of the Gaussian in y.
     x_stddev : float
         Standard deviation of the Gaussian in x.
-        x_stddev and y_stddev must be specified unless a covariance
-        matrix (cov_matrix) is input.
+        ``x_stddev`` and ``y_stddev`` must be specified unless a covariance
+        matrix (``cov_matrix``) is input.
     y_stddev : float
         Standard deviation of the Gaussian in y.
-        x_stddev and y_stddev must be specified unless a covariance
-        matrix (cov_matrix) is input.
+        ``x_stddev`` and ``y_stddev`` must be specified unless a covariance
+        matrix (``cov_matrix``) is input.
     theta : float, optional
-        Rotation angle in radians. The rotation angle increases clockwise.
+        Rotation angle in radians. The rotation angle increases
+        counterclockwise.
     cov_matrix : ndarray, optional
-        A 2x2 covariance matrix. If specified, overrides the x_stddev,
-        y_stddev, and theta specification.
+        A 2x2 covariance matrix. If specified, overrides the ``x_stddev``,
+        ``y_stddev``, and ``theta`` specification.
 
     Notes
     -----
@@ -163,24 +164,47 @@ class Gaussian2D(Parametric2DModel):
             a = \\left(\\frac{\\cos^{2}{\\left (\\theta \\right )}}{2 \\sigma_{x}^{2}} +
             \\frac{\\sin^{2}{\\left (\\theta \\right )}}{2 \\sigma_{y}^{2}}\\right)
 
-            b = \\left(\\frac{-\\sin{\\left (2 \\theta \\right )}}{2 \\sigma_{x}^{2}} +
+            b = \\left(\\frac{\\sin{\\left (2 \\theta \\right )}}{2 \\sigma_{x}^{2}} -
             \\frac{\\sin{\\left (2 \\theta \\right )}}{2 \\sigma_{y}^{2}}\\right)
 
             c = \\left(\\frac{\\sin^{2}{\\left (\\theta \\right )}}{2 \\sigma_{x}^{2}} +
             \\frac{\\cos^{2}{\\left (\\theta \\right )}}{2 \\sigma_{y}^{2}}\\right)
 
+    If using a ``cov_matrix``, the model is of the form:
+        .. math::
+            f(x, y) = A e^{-0.5 \\left(\\vec{x} - \\vec{x}_{0}\\right)^{T} \\Sigma^{-1} \\left(\\vec{x} - \\vec{x}_{0}\\right)}
+
+    where :math:`\\vec{x} = [x, y]`, :math:`\\vec{x}_{0} = [x_{0}, y_{0}]`,
+    and :math:`\\Sigma` is the covariance matrix:
+
+        .. math::
+            \\Sigma = \\left(\\begin{array}{ccc}
+            \\sigma_x^2               & \\rho \\sigma_x \\sigma_y \\\\
+            \\rho \\sigma_x \\sigma_y & \\sigma_y^2
+            \end{array}\\right)
+
+    :math:`\\rho` is the correlation between `x` and `y`, which should
+    be between -1 and +1.  Positive correlation corresponds to a
+    ``theta`` in the range 0 to 90 degrees.  Negative correlation
+    corresponds to a ``theta`` in the range of 0 to -90 degrees.
+
+    See [1]_ for more details about the 2D Gaussian function.
 
     See Also
     --------
     Gaussian1D, Box2D, Beta2D
+
+    References
+    ----------
+    .. [1] http://en.wikipedia.org/wiki/Gaussian_function
     """
 
-    amplitude = Parameter('amplitude')
-    x_mean = Parameter('x_mean')
-    y_mean = Parameter('y_mean')
-    x_stddev = Parameter('x_stddev')
-    y_stddev = Parameter('y_stddev')
-    theta = Parameter('theta')
+    amplitude = Parameter()
+    x_mean = Parameter()
+    y_mean = Parameter()
+    x_stddev = Parameter()
+    y_stddev = Parameter()
+    theta = Parameter()
 
     def __init__(self, amplitude, x_mean, y_mean, x_stddev=None, y_stddev=None,
                  theta=0.0, cov_matrix=None, **constraints):
@@ -222,7 +246,7 @@ class Gaussian2D(Parametric2DModel):
         xdiff = x - x_mean
         ydiff = y - y_mean
         a = 0.5 * ((cost2 / xstd2) + (sint2 / ystd2))
-        b = 0.5 * (-(sin2t / xstd2) + (sin2t / ystd2))
+        b = 0.5 * ((sin2t / xstd2) - (sin2t / ystd2))
         c = 0.5 * ((sint2 / xstd2) + (cost2 / ystd2))
         return amplitude * np.exp(-((a * xdiff ** 2) + (b * xdiff * ydiff) +
                                     (c * ydiff ** 2)))
@@ -246,16 +270,16 @@ class Gaussian2D(Parametric2DModel):
         xdiff2 = xdiff ** 2
         ydiff2 = ydiff ** 2
         a = 0.5 * ((cost2 / xstd2) + (sint2 / ystd2))
-        b = 0.5 * (-(sin2t / xstd2) + (sin2t / ystd2))
+        b = 0.5 * ((sin2t / xstd2) - (sin2t / ystd2))
         c = 0.5 * ((sint2 / xstd2) + (cost2 / ystd2))
         g = amplitude * np.exp(-((a * xdiff2) + (b * xdiff * ydiff) +
                                  (c * ydiff2)))
         da_dtheta = (sint * cost * ((1. / ystd2) - (1. / xstd2)))
         da_dx_stddev = -cost2 / xstd3
         da_dy_stddev = -sint2 / ystd3
-        db_dtheta = (-cos2t / xstd2) + (cos2t / ystd2)
-        db_dx_stddev = sin2t / xstd3
-        db_dy_stddev = -sin2t / ystd3
+        db_dtheta = (cos2t / xstd2) - (cos2t / ystd2)
+        db_dx_stddev = -sin2t / xstd3
+        db_dy_stddev = sin2t / ystd3
         dc_dtheta = -da_dtheta
         dc_dx_stddev = -sint2 / xstd3
         dc_dy_stddev = -cost2 / ystd3
@@ -287,7 +311,7 @@ class Shift(Model):
         column in the input coordinate array
     """
 
-    offsets = Parameter('offsets')
+    offsets = Parameter()
 
     def __init__(self, offsets, param_dim=1):
         if not isinstance(offsets, collections.Sequence):
@@ -329,7 +353,7 @@ class Scale(Model):
         scale for a coordinate
     """
 
-    factors = Parameter('factors')
+    factors = Parameter()
 
     def __init__(self, factors, param_dim=1):
         if not isinstance(factors, collections.Sequence):
@@ -384,8 +408,8 @@ class Sine1D(Parametric1DModel):
         .. math:: f(x) = A \\sin(2 \\pi f x)
     """
 
-    amplitude = Parameter('amplitude')
-    frequency = Parameter('frequency')
+    amplitude = Parameter()
+    frequency = Parameter()
 
     def __init__(self, amplitude, frequency, **constraints):
         super(Sine1D, self).__init__(amplitude=amplitude,
@@ -431,8 +455,8 @@ class Linear1D(Parametric1DModel):
         .. math:: f(x) = a x + b
     """
 
-    slope = Parameter('slope')
-    intercept = Parameter('intercept')
+    slope = Parameter()
+    intercept = Parameter()
     linear = True
 
     def __init__(self, slope, intercept, **constraints):
@@ -480,9 +504,9 @@ class Lorentz1D(Parametric1DModel):
         f(x) = \\frac{A \\gamma^{2}}{\\gamma^{2} + \\left(x - x_{0}\\right)^{2}}
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    fwhm = Parameter('fwhm')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    fwhm = Parameter()
 
     def __init__(self, amplitude, x_0, fwhm, **constraints):
         super(Lorentz1D, self).__init__(amplitude=amplitude, x_0=x_0,
@@ -526,7 +550,7 @@ class Const1D(Parametric1DModel):
         .. math:: f(x) = A
     """
 
-    amplitude = Parameter('amplitude')
+    amplitude = Parameter()
 
     def __init__(self, amplitude, **constraints):
         super(Const1D, self).__init__(amplitude=amplitude, **constraints)
@@ -565,7 +589,7 @@ class Const2D(Parametric2DModel):
         .. math:: f(x, y) = A
     """
 
-    amplitude = Parameter('amplitude')
+    amplitude = Parameter()
 
     def __init__(self, amplitude, **constraints):
         super(Const2D, self).__init__(amplitude=amplitude, **constraints)
@@ -610,10 +634,10 @@ class Disk2D(Parametric2DModel):
                    \\right.
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    y_0 = Parameter('y_0')
-    R_0 = Parameter('R_0')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    y_0 = Parameter()
+    R_0 = Parameter()
 
     def __init__(self, amplitude, x_0, y_0, R_0, **constraints):
         super(Disk2D, self).__init__(amplitude=amplitude, x_0=x_0,
@@ -667,11 +691,11 @@ class Ring2D(Parametric2DModel):
     Where :math:`r_{out} = r_{in} + r_{width}`.
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    y_0 = Parameter('y_0')
-    r_in = Parameter('r_in')
-    width = Parameter('width')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    y_0 = Parameter()
+    r_in = Parameter()
+    width = Parameter()
 
     def __init__(self, amplitude, x_0, y_0, r_in, width=None, r_out=None,
                  **constraints):
@@ -738,9 +762,9 @@ class Box1D(Parametric1DModel):
                    \\right.
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    width = Parameter('width')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    width = Parameter()
 
     def __init__(self, amplitude, x_0, width, **constraints):
         super(Box1D, self).__init__(amplitude=amplitude, x_0=x_0,
@@ -801,11 +825,11 @@ class Box2D(Parametric2DModel):
 
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    y_0 = Parameter('y_0')
-    x_width = Parameter('x_width')
-    y_width = Parameter('y_width')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    y_0 = Parameter()
+    x_width = Parameter()
+    y_width = Parameter()
 
     def __init__(self, amplitude, x_0, y_0, x_width, y_width, **constraints):
         super(Box2D, self).__init__(amplitude=amplitude, x_0=x_0,
@@ -842,10 +866,10 @@ class Trapezoid1D(Parametric1DModel):
     Box1D, Gaussian1D, Beta1D
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    width = Parameter('width')
-    slope = Parameter('slope')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    width = Parameter()
+    slope = Parameter()
 
     def __init__(self, amplitude, x_0, width, slope, **constraints):
         super(Trapezoid1D, self).__init__(amplitude=amplitude, x_0=x_0,
@@ -894,11 +918,11 @@ class TrapezoidDisk2D(Parametric2DModel):
     Disk2D, Box2D
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    y_0 = Parameter('y_0')
-    R_0 = Parameter('R_0')
-    slope = Parameter('slope')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    y_0 = Parameter()
+    R_0 = Parameter()
+    slope = Parameter()
 
     def __init__(self, amplitude, x_0, y_0, R_0, slope, **constraints):
         super(TrapezoidDisk2D, self).__init__(amplitude=amplitude,
@@ -945,9 +969,9 @@ class MexicanHat1D(Parametric1DModel):
 
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    sigma = Parameter('sigma')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    sigma = Parameter()
 
     def __init__(self, amplitude, x_0, sigma, **constraints):
         super(MexicanHat1D, self).__init__(amplitude=amplitude,
@@ -993,10 +1017,10 @@ class MexicanHat2D(Parametric2DModel):
         - \\left(y - y_{0}\\right)^{2}}{2 \\sigma^{2}}}
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    y_0 = Parameter('y_0')
-    sigma = Parameter('sigma')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    y_0 = Parameter()
+    sigma = Parameter()
 
     def __init__(self, amplitude, x_0, y_0, sigma, **constraints):
         super(MexicanHat2D, self).__init__(amplitude=amplitude, x_0=x_0,
@@ -1023,64 +1047,78 @@ class AiryDisk2D(Parametric2DModel):
         x position of the maximum of the Airy function.
     y_0 : float
         y position of the maximum of the Airy function.
-    width : float
-        Width of the Airy function.
+    radius : float
+        The radius of the Airy disk (radius of the first zero).
 
     See Also
     --------
     Box2D, TrapezoidDisk2D, Gaussian2D
 
-
     Notes
     -----
     Model formula:
 
-        .. math:: f(r) = A \\frac{J_1(2 \\pi r)}{\\pi r}
+        .. math:: f(r) = A \\left[\\frac{2 J_1(\\frac{\\pi r}{R/R_z})}{\\frac{\\pi r}{R/R_z}}\\right]^2
 
-    Where J1 is the first order Bessel function of first kind.
+    Where :math:`J_1` is the first order Bessel function of the first
+    kind, :math:`r` is radial distance from the maximum of the Airy
+    function (:math:`r = \\sqrt{(x - x_0)^2 + (y - y_0)^2}`), :math:`R`
+    is the input ``radius`` parameter, and :math:`R_z =
+    1.2196698912665045`).
+
+    For an optical system, the radius of the first zero represents the
+    limiting angular resolution and is approximately 1.22 * lambda / D,
+    where lambda is the wavelength of the light and D is the diameter of
+    the aperture.
+
+    See [1]_ for more details about the Airy disk.
+
+    References
+    ----------
+    .. [1] http://en.wikipedia.org/wiki/Airy_disk
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    y_0 = Parameter('y_0')
-    width = Parameter('width')
-
+    amplitude = Parameter()
+    x_0 = Parameter()
+    y_0 = Parameter()
+    radius = Parameter()
     _j1 = None
 
-    def __init__(self, amplitude, x_0, y_0, width, **constraints):
+    def __init__(self, amplitude, x_0, y_0, radius, **constraints):
         if self._j1 is None:
             try:
-                from scipy.special import j1
+                from scipy.special import j1, jn_zeros
                 self.__class__._j1 = j1
+                self.__class__._rz = jn_zeros(1, 1)[0] / np.pi
             # add a ValueError here for python3 + scipy < 0.12
             except (ValueError, ImportError):
                 raise ImportError("AiryDisk2D model requires scipy > 0.11.")
+
         super(AiryDisk2D, self).__init__(amplitude=amplitude, x_0=x_0,
-                                         y_0=y_0, width=width,
+                                         y_0=y_0, radius=radius,
                                          **constraints)
 
     def __deepcopy__(self, memo):
         new_model = self.__class__(self.amplitude.value, self.x_0.value,
-                                   self.y_0.value, self.width.value)
+                                   self.y_0.value, self.radius.value)
         return new_model
 
     def __copy__(self):
         new_model = self.__class__(self.amplitude.value, self.x_0.value,
-                                   self.y_0.value, self.width.value)
+                                   self.y_0.value, self.radius.value)
         return new_model
 
     @classmethod
-    def eval(cls, x, y, amplitude, x_0, y_0, width):
+    def eval(cls, x, y, amplitude, x_0, y_0, radius):
         """Two dimensional Airy model function"""
 
-        r = np.sqrt((x - x_0) ** 2 + (y - y_0) ** 2) / width
-
+        r = np.sqrt((x - x_0) ** 2 + (y - y_0) ** 2) / (radius / cls._rz)
         # Since r can be zero, we have to take care to treat that case
-        # separately so as not to raise a Numpy warning
+        # separately so as not to raise a numpy warning
         z = np.ones(r.shape)
-        z[r > 0] = (amplitude * (cls._j1(2 * np.pi * r[r > 0]) /
-                    (np.pi * r[r > 0])) ** 2)
-
+        rt = np.pi * r[r > 0]
+        z[r > 0] = (2.0 * cls._j1(rt) / rt)**2
+        z *= amplitude
         return z
 
 
@@ -1112,10 +1150,10 @@ class Beta1D(Parametric1DModel):
         f(x) = A \\left(1 + \\frac{\\left(x - x_{0}\\right)^{2}}{\\gamma^{2}}\\right)^{- \\alpha}
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    gamma = Parameter('gamma')
-    alpha = Parameter('alpha')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    gamma = Parameter()
+    alpha = Parameter()
 
     def __init__(self, amplitude, x_0, gamma, alpha, **constraints):
         super(Beta1D, self).__init__(amplitude=amplitude, x_0=x_0,
@@ -1172,11 +1210,11 @@ class Beta2D(Parametric2DModel):
         \\left(y - y_{0}\\right)^{2}}{\\gamma^{2}}\\right)^{- \\alpha}
     """
 
-    amplitude = Parameter('amplitude')
-    x_0 = Parameter('x_0')
-    y_0 = Parameter('y_0')
-    gamma = Parameter('gamma')
-    alpha = Parameter('alpha')
+    amplitude = Parameter()
+    x_0 = Parameter()
+    y_0 = Parameter()
+    gamma = Parameter()
+    alpha = Parameter()
 
     def __init__(self, amplitude, x_0, y_0, gamma, alpha, **constraints):
         super(Beta2D, self).__init__(amplitude=amplitude, x_0=x_0,

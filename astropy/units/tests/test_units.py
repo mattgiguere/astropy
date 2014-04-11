@@ -319,9 +319,11 @@ def test_compose_cgs_to_si():
         assert [x.is_equivalent(unit) for x in si]
         assert si[0] == unit.si
 
+    # Can't decompose Celsius
     for val in u.cgs.__dict__.values():
         if (isinstance(val, u.UnitBase) and
-                not isinstance(val, u.PrefixUnit)):
+                not isinstance(val, u.PrefixUnit) and
+                val != u.cgs.deg_C):
             yield _test_compose_cgs_to_si, val
 
 
@@ -339,9 +341,11 @@ def test_compose_si_to_cgs():
             assert [x.is_equivalent(unit) for x in cgs]
             assert cgs[0] == unit.cgs
 
+    # Can't decompose Celsius
     for val in u.si.__dict__.values():
         if (isinstance(val, u.UnitBase) and
-                not isinstance(val, u.PrefixUnit)):
+                not isinstance(val, u.PrefixUnit) and
+                val != u.si.deg_C):
             yield _test_compose_si_to_cgs, val
 
 
@@ -548,6 +552,7 @@ def test_composite_unit_get_format_name():
     assert (str(u.CompositeUnit(1, [unit1, unit2], [1, -1])) ==
             'nrad / (Hz(1/2) s)')
 
+
 def test_unicode_policy():
     from ...tests.helper import assert_follows_unicode_guidelines
 
@@ -612,3 +617,9 @@ def test_fractional_powers():
 
 def test_inherit_docstrings():
     assert u.UnrecognizedUnit.is_unity.__doc__ == u.UnitBase.is_unity.__doc__
+
+
+def test_sqrt_mag():
+    sqrt_mag = u.mag ** 0.5
+    assert hasattr(sqrt_mag.decompose().scale, 'imag')
+    assert (sqrt_mag.decompose())**2 == u.mag

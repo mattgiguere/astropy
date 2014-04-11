@@ -13,6 +13,9 @@ New Features
 
 - ``astropy.convolution``
 
+  - Changed the input parameter in ``Gaussian1DKernel`` and
+    ``Gaussian2DKernel`` from ``width`` to ``stddev`` [#2085].
+
 - ``astropy.coordinates``
 
   - Updated `Angle.dms` and `Angle.hms` to return `namedtuple`s instead of
@@ -48,7 +51,17 @@ New Features
   - A new ``csv`` format was added as a convenience for handling CSV (comma-
     separated values) data. [#1935]
 
+  - An option was added to guess the start of data for CDS format files when
+    they do not strictly conform to the format standard. [#2241]
+
+  - Added an HTML reader and writer to the ``astropy.io.ascii`` package.
+    Parsing requires the installation of BeautifulSoup and is therefore
+    an optional feature. [#2160]
+
 - ``astropy.io.fits``
+
+  - Included a new command-line script called ``fitsheader`` to display the
+    header(s) of a FITS file from the command line. [#2092]
 
 - ``astropy.io.misc``
 
@@ -58,9 +71,24 @@ New Features
 
 - ``astropy.modeling``
 
+  - Changed ``Gaussian2D`` model such that ``theta`` now increases
+    counterclockwise. [#2199]
+
+  - Replaced the ``MatrixRotation2D`` model with a new model called simply
+    ``Rotation2D`` which requires only an angle to specify the rotation.
+    The new ``Rotation2D`` rotates in a counter-clockwise sense whereas
+    the old ``MatrixRotation2D`` increased the angle clockwise.
+    [#2266, #2269]
+
+  - Added a new ``AffineTransformation2D`` model which serves as a
+    replacement for the capability of ``MatrixRotation2D`` to accept an
+    arbitrary matrix, while also adding a translation capability. [#2269]
+
 - ``astropy.nddata``
 
 - ``astropy.stats``
+
+  - Added flat prior to binom_conf_interval and binned_binom_proportion
 
 - ``astropy.sphinx``
 
@@ -88,6 +116,8 @@ New Features
     scale is taken from the object one adds to or subtracts from).
     This allows, e.g., to work consistently in TDB.  [#1932]
 
+  - `Time` now supports ISO format strings that end in "Z". [#2211, #2203]
+
 - ``astropy.units``
 
   - Support for the unit format `Office of Guest Investigator Programs
@@ -100,6 +130,11 @@ New Features
 
   - Added `one` as a shortcut to `dimensionless_unscaled`. [#1980]
 
+  - Added `dex` and `dB` units. [#1628]
+
+  - Added ``temperature()`` equivalencies to support conversion between
+    Kelvin, Celsius, and Fahrenheit. [#2209]
+
 - ``astropy.utils``
 
   - `astropy.utils.timer.RunTimePredictor` now uses `astropy.modeling`
@@ -111,6 +146,15 @@ New Features
     the SAMPy package, which has been refactored for use in Astropy). [#1907]
 
 - ``astropy.wcs``
+
+  - astropy now requires wcslib version 4.20 or later.  The version of
+    wcslib included with astropy has been updated to version 4.21.
+
+  - Bounds checking is now performed on native spherical
+    coordinates.  Any out-of-bounds values will be returned as
+    ``NaN``, and marked in the ``stat`` array, if using the
+    low-level ``wcslib`` interface such as
+    ``astropy.wcs.Wcsprm.p2s``. [#2107]
 
 API Changes
 ^^^^^^^^^^^
@@ -222,11 +266,21 @@ Bug Fixes
 - ``astropy.wcs``
 
   - astropy now requires wcslib version 4.20 or later.  The version of
-    wcslib included with astropy has likewise been updated to version
-    4.20.
+    wcslib included with astropy has been updated to version 4.21.  The
+    following is the relevant parts of the ``wcslib`` changelog:
 
     - This version of wcslib brings some bugfixes from the astropy
       project (described below) and tighter bounds checking.
+
+    - Bug fixes in the projection routines: in ``hpxx2s`` [the
+      cartesian-to-spherical operation of the ``HPX`` projection]
+      relating to bounds checking, bug introduced at wcslib 4.20,
+      reported by Michael Droettboom; in ``parx2s`` and molx2s`` [the
+      cartesion-to-spherical operation of the ``PAR`` and ``MOL``
+      projections respectively] relating to setting the stat vector;
+      in ``hpxx2s`` relating to implementation of the vector API; and
+      in ``xphx2s`` relating to setting an out-of-bounds value of
+      *phi*.
 
   - A new method, `astropy.wcs.Wcsprm.bounds_check` (corresponding to
     wcslib's ``wcsbchk``) has been added to control what bounds
@@ -240,6 +294,7 @@ Bug Fixes
     import for any reason, ``import astropy.wcs`` will result in an
     `ImportError`, rather than getting obscure errors once the
     `astropy.wcs` is used. [#2061]
+
 
 Other Changes and Additions
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^
@@ -267,6 +322,8 @@ Other Changes and Additions
   behavior.  If unicode support of masked arrays is important to your
   application, upgrade to Numpy 1.8 or later for best results. [#2059]
 
+- The developer documentation has been extensively rearranged and
+  rewritten. [#1712]
 
 0.3.2 (unreleased)
 ------------------
@@ -282,9 +339,31 @@ Bug Fixes
 
 - ``astropy.coordinates``
 
+  - if ``sep`` argument is specified to be a single character in
+    ``sexagisimal_to_string``, it now includes seperators only between
+    items [#2183]
+
+  - Ensure comparisons involving ``Distance`` objects do not raise exceptions;
+    also ensure operations that lead to units other than length return
+    ``Quantity``. [#2206, #2250]
+
+  - Multiplication and division of ``Angle`` objects is now
+    supported. [#2273]
+
 - ``astropy.cosmology``
 
+  - Fixed ``format()`` compatibility with Python 2.6. [#2129]
+
+  - Be more carful about converting to floating point internally [#1815, #1818]
+
 - ``astropy.io.ascii``
+
+  - The CDS reader in ``astropy.io.ascii`` can now handle multiple
+    description lines in ReadMe files. [#2225]
+
+  - When reading a table with values that generate an overflow error during
+    type conversion (e.g. overflowing the native C long type), fall through to
+    using string. Previously this generated an exception [#2234].
 
 - ``astropy.io.fits``
 
@@ -310,13 +389,34 @@ Bug Fixes
 
 - ``astropy.table``
 
+  - Ensure nameless columns can be printed, using 'None' for the header. [#2213]
+
 - ``astropy.time``
 
 - ``astropy.units``
 
+  - ``Quantity._repr_latex_()`` returns ``NotImplementedError`` for quantity
+    arrays instead of an uninformative formatting exception. [#2258]
+
+  - Ensure ``Quantity.flat`` always returns ``Quantity``. [#2251]
+
+  - ``Quantity.copy`` now behaves identically to ``ndarray.copy``, and thus
+    supports the ``order`` argument (for numpy >=1.6). [#2284]
+
 - ``astropy.utils``
 
+  - Progress bars will now be displayed inside the IPython
+    qtconsole. [#2230]
+
+  - ``data.download_file()`` now evaluates ``REMOTE_TIMEOUT()`` at runtime
+    rather than import time. Previously, setting ``REMOTE_TIMEOUT`` after
+    import had no effect on the function's behavior. [#2302]
+    
 - ``astropy.vo``
+
+  - Fixed ``format()`` compatibility with Python 2.6. [#2129]
+  - Cone Search validation no longer raises ``ConeSearchError`` for positive RA.
+    [#2240, #2242]
 
 - ``astropy.wcs``
 
@@ -405,7 +505,9 @@ Bug Fixes
 
   - Raise a `NotImplementedError` when fitting composite models. [#1915]
 
-  - Fixed bug in computation of ``Gaussian2D`` model. [#2038]
+  - Fixed bug in the computation of the ``Gaussian2D`` model. [#2038]
+
+  - Fixed bug in the computation of the ``AiryDisk2D`` model. [#2093]
 
 - ``astropy.sphinx``
 

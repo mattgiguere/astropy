@@ -314,3 +314,34 @@ def test_empty_sep():
     a = Angle('05h04m31.93830s')
 
     assert a.to_string(sep='', precision=2, pad=True) == '050431.94'
+
+def test_create_tuple():
+    """
+    Tests creation of an angle with a (d,m,s) or (h,m,s) tuple
+    """
+    a1 = Angle((1, 30, 0), unit=u.degree)
+    assert a1.value == 1.5
+
+    a1 = Angle((1, 30, 0), unit=u.hourangle)
+    assert a1.value == 1.5
+
+def test_list_of_quantities():
+    a1 = Angle([1*u.deg, 1*u.hourangle])
+    assert a1.unit == u.deg
+    assert_allclose(a1.value, [1, 15])
+
+    a2 = Angle([1*u.hourangle, 1*u.deg], u.deg)
+    assert a2.unit == u.deg
+    assert_allclose(a2.value, [15, 1])
+
+def test_multiply_divide():
+    # Issue #2273
+    a1 = Angle([1, 2, 3], u.deg)
+    a2 = Angle([4, 5, 6], u.deg)
+    a3 = a1 * a2
+    assert_allclose(a3.value, [4, 10, 18])
+    assert a3.unit == (u.deg * u.deg)
+
+    a3 = a1 / a2
+    assert_allclose(a3.value, [.25, .4, .5])
+    assert a3.unit == u.dimensionless_unscaled

@@ -11,10 +11,27 @@ from ....tests.helper import pytest
 from ... import ascii as asciitable  # TODO: delete this line, use ascii.*
 from ... import ascii
 from ....table import Table
+from distutils import version
 
 from .common import (raises, assert_equal, assert_almost_equal,
                      assert_true, setup_function, teardown_function)
 from ....tests.helper import pytest
+
+_NUMPY_VERSION = version.LooseVersion(np.__version__)
+
+def test_convert_overflow():
+    """
+    Test reading an extremely large integer, which falls through to
+    string due to an overflow error (#2234).
+    """
+    # Before Numpy 1.6 the exception from np.array(['1' * 10000], dtype=np.int)
+    # is exactly the same as np.array(['abc'], dtype=np.int).  In this case
+    # it falls through to float, so we just accept this as a known issue for
+    # numpy < 1.6.
+    expected_kind = ('f',) if _NUMPY_VERSION < version.LooseVersion('1.6') else ('S', 'U')
+    dat = ascii.read(['a', '1' * 10000], format='basic', guess=False)
+    assert dat['a'].dtype.kind in expected_kind
+
 
 def test_guess_with_names_arg():
     """
@@ -497,6 +514,22 @@ def get_testfiles(name=None):
          'name': 't/cds.dat',
          'nrows': 1,
          'opts': {'Reader': asciitable.Cds}},
+        # Test malformed CDS file (issues #2241 #467)
+        {'cols': ('Index',
+                  'RAh',
+                  'RAm',
+                  'RAs',
+                  'DE-',
+                  'DEd',
+                  'DEm',
+                  'DEs',
+                  'Match',
+                  'Class',
+                  'AK',
+                  'Fit'),
+         'name': 't/cds_malformed.dat',
+         'nrows': 1,
+         'opts': {'Reader': asciitable.Cds, 'data_start': 'guess'}},
         {'cols': ('a', 'b', 'c'),
          'name': 't/commented_header.dat',
          'nrows': 2,
@@ -686,6 +719,15 @@ def get_testfiles(name=None):
          'nrows': 3,
          'opts': {'Reader': asciitable.AASTex}},
     ]
+
+    try:
+        import bs4
+        testfiles.append({'cols': ('Column 1', 'Column 2', 'Column 3'),
+                          'name': 't/html.html',
+                          'nrows': 3,
+                          'opts': {'Reader': asciitable.HTML}})
+    except ImportError:
+        pass
 
     if name is not None:
         return [x for x in testfiles if x['name'] == name][0]

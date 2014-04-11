@@ -13,9 +13,9 @@ projects or packages.
 Quantities lose their units with some operations
 ------------------------------------------------
 
-Quantities are subclassed from numpy's `ndarray` and in some numpy operations
+Quantities are subclassed from numpy's `~numpy.ndarray` and in some numpy operations
 (and in scipy operations using numpy internally) the subclass is ignored, which
-means that either a plain array is returned, or a `Quantity` without units.
+means that either a plain array is returned, or a `~astropy.units.quantity.Quantity` without units.
 E.g.::
 
     In [1]: import astropy.units as u
@@ -57,8 +57,8 @@ some platforms in the IPython console (prior to IPython version
     ERROR: UnicodeEncodeError: 'ascii' codec can't encode character u'\xe5' in
     position 184: ordinal not in range(128) [IPython.core.page]
 
-This can be worked around by changing the default encoding to `utf-8`
-by adding the following to your `sitecustomize.py` file::
+This can be worked around by changing the default encoding to ``utf-8``
+by adding the following to your ``sitecustomize.py`` file::
 
     import sys
     sys.setdefaultencoding('utf-8')
@@ -143,7 +143,7 @@ Upgrading Astropy in the anaconda python distribution using ``pip`` can result
 in a corrupted install with a mix of files from the old version and the new
 version. Anaconda users should update with ``conda update astropy``. There
 may be a brief delay between the release of Astropy on PyPI and its release
-via the `conda` package manager; users can check the availability of new
+via the ``conda`` package manager; users can check the availability of new
 versions with ``conda search astropy``.
 
 Installation fails on Mageia-2 or Mageia-3 distributions
@@ -184,3 +184,15 @@ One workaround is to install the ``bsddb3`` module.
 .. [#] Continuum `says
        <https://groups.google.com/a/continuum.io/forum/#!topic/anaconda/mCQL6fVx55A>`_
        this will be fixed in their next Python build.
+
+
+Very long integers in ASCII tables silently converted to float for Numpy 1.5
+----------------------------------------------------------------------------
+
+For Numpy 1.5, when reading an ASCII table that has integers which are too
+large to fit into the native C long int type for the machine, then the
+values get converted to float type with no warning.  This is due to the
+behavior of `numpy.array` and cannot easily be worked around.  We recommend
+that users upgrade to a newer version of Numpy.  For Numpy >= 1.6 a warning
+is printed and the values are treated as strings to preserve all information.
+

@@ -43,9 +43,9 @@ def test_angle_arrays():
     npt.assert_almost_equal(a6.value, 945.0)
     assert a6.unit is u.degree
 
-    with pytest.raises(TypeError):
-        # Arrays of Angle objects are not supported -- that's really
-        # tricky to do correctly, if at all, due to the possibility of
+    with pytest.raises((TypeError, ValueError)):  # ValueError for numpy 1.5.x
+        # Arrays where the elements are Angle objects are not supported -- it's
+        # really tricky to do correctly, if at all, due to the possibility of
         # nesting.
         a7 = Angle([a1, a2, a3], unit=u.degree)
 
@@ -170,8 +170,8 @@ def test_array_coordinates_transformations(arrshape, distance):
 
     #now make sure round-tripping works through FK5 - this exercises both static and dynamic transform matricies
     c2 = c.fk5.icrs
-    npt.assert_array_almost_equal(c.ra, c2.ra)
-    npt.assert_array_almost_equal(c.dec, c2.dec)
+    npt.assert_array_almost_equal(c.ra.radian, c2.ra.radian)
+    npt.assert_array_almost_equal(c.dec.radian, c2.dec.radian)
 
     assert c2.ra.shape == arrshape
 

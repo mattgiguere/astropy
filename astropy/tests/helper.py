@@ -144,12 +144,12 @@ class TestRunner(object):
                 warnings.warn(
                     "Can not test .rst docs, since docs path "
                     "({0}) does not exist.".format(docs_path))
+                docs_path = None
 
         if test_path:
             base, ext = os.path.splitext(test_path)
             if ext == '.py':
-                test_path = os.path.join(package_path,
-                                         os.path.abspath(test_path))
+                test_path = os.path.abspath(test_path)
                 all_args += test_path
             elif ext == '.rst':
                 if docs_path is None:
@@ -157,7 +157,12 @@ class TestRunner(object):
                     raise ValueError(
                         "Can not test .rst files without a docs_path specified.")
                 else:
-                    test_path = os.path.join(docs_path, test_path)
+                    # Since we aren't testing any Python files within
+                    # the astropy tree, we need to forcibly load the
+                    # astropy py.test plugins, and then turn on the
+                    # doctest_rst plugin.
+                    all_args += ' -p astropy.tests.pytest_plugins --doctest-rst '
+                    test_path = os.path.join(docs_path, '..', test_path)
                     all_args += test_path
             else:
                 raise ValueError("Test file path must be to a .py or .rst file")
@@ -406,7 +411,8 @@ class astropy_test(Command, object):
                 elif six.PY2:
                     ignore_python_version = '3'
                 coveragerc_content = coveragerc_content.replace(
-                    "{ignore_python_version}", ignore_python_version)
+                    "{ignore_python_version}", ignore_python_version).replace(
+                        "{packagename}", self.package_name)
                 tmp_coveragerc = os.path.join(tmp_dir, 'coveragerc')
                 with open(tmp_coveragerc, 'wb') as tmp:
                     tmp.write(coveragerc_content.encode('utf-8'))
@@ -457,7 +463,7 @@ class astropy_test(Command, object):
             # new extension modules may have appeared, and this is the
             # easiest way to set up a new environment
             try:
-                retcode = subprocess.call([sys.executable, '-c', cmd],
+                retcode = subprocess.call([sys.executable, '-B', '-c', cmd],
                                           cwd=testing_path, close_fds=False)
             finally:
                 # kill the temporary dirs

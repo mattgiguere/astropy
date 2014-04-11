@@ -278,7 +278,7 @@ more input tables:
      - Function
    * - :ref:`grouped-operations`
      - Group tables and columns by keys
-     - `~astropy.table.table.Table.group_by`
+     - `~astropy.table.Table.group_by`
    * - :ref:`stack-vertically`
      - Concatenate input tables along rows
      - `~astropy.table.operations.vstack`
@@ -402,7 +402,7 @@ framework that provides common built-in kernels:
     image = np.random.random((128, 128))
 
     # Create kernel
-    g = Gaussian2DKernel(width=1)
+    g = Gaussian2DKernel(stddev=1)
 
     # Convolve data
     image_new = convolve(image, g, boundary='extend')

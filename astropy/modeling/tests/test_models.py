@@ -65,7 +65,7 @@ class TestSerialComposite(object):
 
     def test_labeledinput_2(self):
         labeled_input = LabeledInput([self.x, self.y], ['x', 'y'])
-        rot = models.MatrixRotation2D(angle=23.4)
+        rot = models.Rotation2D(angle=23.4)
         offx = models.Shift(-2)
         offy = models.Shift(1.2)
         model = SerialCompositeModel([rot, offx, offy],
@@ -80,7 +80,7 @@ class TestSerialComposite(object):
 
     def test_labeledinput_3(self):
         labeled_input = LabeledInput([2, 4.5], ['x', 'y'])
-        rot = models.MatrixRotation2D(angle=23.4)
+        rot = models.Rotation2D(angle=23.4)
         offx = models.Shift(-2)
         offy = models.Shift(1.2)
         model = SerialCompositeModel([rot, offx, offy],
@@ -94,7 +94,7 @@ class TestSerialComposite(object):
         utils.assert_almost_equal(y, result.y)
 
     def test_multiple_input(self):
-        rot = models.MatrixRotation2D(angle=-60)
+        rot = models.Rotation2D(angle=-60)
         model = SerialCompositeModel([rot, rot])
         xx, yy = model(self.x, self.y)
         inverse_model = model.inverse()
@@ -188,7 +188,7 @@ def test_custom_model(amplitude=4, frequency=1):
     data = sin_model(x) + np.random.rand(len(x)) - 0.5
     fitter = fitting.NonLinearLSQFitter()
     model = fitter(sin_model, x, data)
-    fitparams, _ = model._model_to_fit_params()
+    fitparams, _ = fitter._model_to_fit_params(model)
     assert np.all((fitparams - np.array([amplitude, frequency])) < 0.001)
 
 
@@ -294,7 +294,7 @@ class TestParametricModels(object):
         fitted_parameters = [val
                              for (val, fixed) in zip(parameters, fixed)
                              if not fixed]
-        fitparams, _ = new_model._model_to_fit_params()
+        fitparams, _ = fitter._model_to_fit_params(new_model)
         utils.assert_allclose(fitparams, fitted_parameters,
                               atol=self.fit_error)
 
@@ -350,7 +350,7 @@ class TestParametricModels(object):
         data = model(xv, yv) + 0.1 * parameters[0] * (np.random.rand(self.N, self.N) - 0.5)
         fitter = fitting.NonLinearLSQFitter()
         new_model = fitter(model, xv, yv, data)
-        fitparams, _ = new_model._model_to_fit_params()
+        fitparams, _ = fitter._model_to_fit_params(new_model)
         utils.assert_allclose(fitparams, parameters, atol=self.fit_error)
 
     @pytest.mark.skipif('not HAS_SCIPY')

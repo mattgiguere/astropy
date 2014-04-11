@@ -39,7 +39,7 @@ It accepts the following options:
     * ``:no-heading:```
         If specified do not create a top level heading for the section.
 
-This extension also adds two sphinx configuration option:
+This extension also adds two sphinx configuration options:
 
 * `automodapi_toctreedirnm`
     This must be a string that specifies the name of the directory the
@@ -102,6 +102,7 @@ Class Inheritance Diagram
 
 .. automod-diagram:: {modname}
     :private-bases:
+    :parts: 1
 """
 
 _automodapirex = re.compile(r'^(?:\s*\.\.\s+automodapi::\s*)([A-Za-z0-9_.]+)'
